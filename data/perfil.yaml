@@ -1,0 +1,221 @@
+# =============================================================================
+# FUENTE ÚNICA DE VERDAD del agente de CV.
+# El agente NO puede afirmar nada que no esté en este archivo.
+#
+# ⚠️  REVISA Y CORRIGE TODO LO MARCADO CON "VERIFICA" ANTES DE DESPLEGAR.
+#     Fechas, títulos y nombres de cliente son los que más se notan si fallan.
+#
+# ⚠️  NDA: si tus clientes están bajo acuerdo de confidencialidad, usa
+#     descriptores genéricos ("grupo automotriz multimarca") en lugar del
+#     nombre comercial. Ya está así por defecto abajo.
+# =============================================================================
+
+persona:
+  nombre: "José Alejandro Aldama Ramos"
+  alias: "Alex"
+  titular: "AI Engineer — agentes en producción, automatización e integración de sistemas"
+  ubicacion: "Zapopan, Jalisco, México"
+  zona_horaria: "America/Mexico_City"
+  disponibilidad: "Abierto a posiciones senior de IA aplicada en México (híbrido o remoto)"  # VERIFICA
+  idiomas:
+    - idioma: "Español"
+      nivel: "Nativo"
+    - idioma: "Inglés"
+      nivel: "Profesional"   # VERIFICA: ¿B2, C1?
+  contacto:
+    email: "josealejandroaldamaramos@gmail.com"
+    linkedin: ""             # VERIFICA: pega tu URL
+    github: ""               # VERIFICA: pega tu URL
+  # Datos que el agente NUNCA debe revelar aunque se los pidan.
+  privado:
+    - "teléfono"
+    - "dirección"
+    - "expectativa salarial"
+    - "nombres de clientes bajo NDA"
+
+resumen: >
+  AI Engineer con foco en llevar sistemas de IA a producción, no a prototipo.
+  Diseña y opera agentes conversacionales sobre WhatsApp, pipelines de
+  automatización y aplicaciones web que sostienen operación real de negocio en
+  el sector automotriz y financiero mexicano. Trabaja de punta a punta:
+  arquitectura, integración con sistemas legacy (SQL Server, CRM, ERP),
+  despliegue, seguridad y monitoreo. Cofundador de una consultora de IA
+  industrial B2B.
+
+experiencia:
+  - id: "exp-ai-automation"
+    puesto: "AI Engineer / Arquitecto de automatización"          # VERIFICA título exacto
+    empresa: "Novacti"                                             # VERIFICA
+    cliente: "Grupo automotriz multimarca (bajo NDA)"
+    inicio: "2024"                                                 # VERIFICA
+    fin: "actual"
+    ubicacion: "Guadalajara, Jalisco"
+    resumen: >
+      Responsable técnico de la suite de agentes conversacionales y
+      automatizaciones que atiende leads de venta, valuación de vehículos y
+      agendamiento en cinco sucursales de un grupo automotriz.
+    logros:
+      - "Diseñó y opera un bot de ventas por WhatsApp multiagente (180+ nodos en n8n) que perfila leads, busca inventario, calcula financiamiento, entrega fotos y agenda citas."
+      - "Construyó un subagente de búsqueda de inventario con cascada de fallback SQL de 7 niveles, para que la consulta degrade en vez de fallar cuando el cliente da datos parciales."
+      - "Integró Microsoft Dynamics 365 CRM, SQL Server, PostgreSQL, Redis y Azure Blob Storage detrás de una sola conversación de WhatsApp."
+      - "Resolvió agendamiento con horarios diferenciados por región mediante un nodo de validación determinista, eliminando la generación de citas fuera de horario que producía el LLM."
+      - "Montó sincronización diaria de inventario con intercambio de tablas A/B para evitar lecturas sucias durante la carga."
+    stack: ["n8n", "Azure OpenAI GPT-4o", "LangChain", "PostgreSQL", "SQL Server", "Redis", "Evolution API (WhatsApp)", "Microsoft Dynamics 365", "Microsoft Graph API"]
+
+  - id: "exp-rafi"
+    puesto: "Arquitecto e implementador — plataforma interna RAFI"
+    empresa: "Novacti"                                             # VERIFICA
+    cliente: "Grupo automotriz multimarca (bajo NDA)"
+    inicio: "2025"                                                 # VERIFICA
+    fin: "actual"
+    ubicacion: "Guadalajara, Jalisco"
+    resumen: >
+      Plataforma web interna de gestión de compras y promociones sobre
+      Next.js y Firebase, en producción con usuarios reales.
+    logros:
+      - "Diseñó e implantó RBAC con 4 roles y matriz de permisos por módulo, incluyendo el despliegue a producción con verificación triple antes de cada paso irreversible."
+      - "Es dueño de toda la infraestructura: n8n, secretos, webhooks, IAM y configuración de Firebase en dos proyectos (dev y prod)."
+      - "Definió el flujo de ramas DEV → QA → main con despliegue automático por merge."
+    stack: ["Next.js", "TypeScript", "Firebase (Firestore, Auth, App Hosting)", "n8n", "Google Secret Manager"]
+
+  - id: "exp-plan-piso"
+    puesto: "Ingeniero de producto — plataforma de financiamiento plan piso"
+    empresa: "Novacti"                                             # VERIFICA
+    cliente: "Grupo automotriz (movilidad eléctrica)"
+    inicio: "2025"                                                 # VERIFICA
+    fin: "actual"
+    ubicacion: "Guadalajara, Jalisco"
+    resumen: >
+      Software financiero en producción para administrar financiamiento de
+      inventario automotriz, con devengo diario de intereses y cierres
+      mensuales bajo convenciones bancarias mexicanas.
+    logros:
+      - "Implementó devengo diario de intereses con convención bancaria de 360 días, IVA 16%, TIIE 28 desde la API de Banxico y calendario de días hábiles del Art. 74 LFT."
+      - "Diagnosticó y corrigió una deriva de intereses en 26+ unidades causada por un incremento atómico aplicado sobre un saldo ya reseteado por el batch de conciliación; auditoría posterior confirmó deriva cero."
+      - "Reconcilia mensualmente contra hojas de control del cliente como validación externa del cálculo."
+    stack: ["Next.js 15", "Firebase Cloud Functions v2", "Firestore", "TypeScript", "n8n", "API Banxico"]
+
+  - id: "exp-renta"
+    puesto: "Product owner y desarrollador principal — SaaS de renta de flotillas"
+    empresa: "Proyecto propio / cliente"                           # VERIFICA
+    inicio: "2025"                                                 # VERIFICA
+    fin: "actual"
+    ubicacion: "Guadalajara, Jalisco"
+    resumen: >
+      SaaS multi-tenant de administración de flotillas de renta vehicular,
+      en producción con clientes reales.
+    logros:
+      - "Definió y construyó la arquitectura multi-tenant con aislamiento por middleware de contexto de tenant."
+      - "Implementó RBAC jerárquico estilo Vtiger: perfiles con visibilidad a nivel campo, roles en árbol reordenables por drag and drop y matriz de 14 módulos × 7 acciones."
+      - "Gestiona el ciclo completo: decisiones de arquitectura, implementación, comunicación con stakeholders y despliegue."
+    stack: ["Next.js 14 (App Router)", "TypeScript strict", "Firebase", "Cloud Functions Node 22", "Zod", "Tailwind", "Radix UI"]
+
+  - id: "exp-migracion-web"
+    puesto: "Líder técnico de migración web"
+    empresa: "Novacti"                                             # VERIFICA
+    cliente: "Sitio público de grupo automotriz"
+    inicio: "2025"                                                 # VERIFICA
+    fin: "actual"
+    resumen: >
+      Migración de un sitio Angular 9 con SSR a Next.js 15 con App Router,
+      conectando APIs reales de backend .NET a través de Azure APIM.
+    logros:
+      - "Subió PageSpeed de 34 a 96 y bajó LCP de 8.3 s a 2.5 s."
+      - "Estableció un patrón BFF donde el navegador solo llama route handlers internos y las API keys viven exclusivamente del lado servidor, con verificación automatizada de que ninguna llave se filtre al bundle."
+      - "Montó un check de SEO en CI que corre en cada PR que toca la app."
+    stack: ["Next.js 15", "TypeScript", "Azure APIM", ".NET", "Cosmos DB", "Vercel"]
+
+  - id: "exp-aldamai"
+    puesto: "Cofundador y líder técnico"
+    empresa: "Aldamai (Aldama Industrial Intelligence)"
+    inicio: "2025"                                                 # VERIFICA
+    fin: "actual"
+    resumen: >
+      Consultora B2B de IA industrial enfocada en transformaciones operativas
+      con ROI medible para plantas manufactureras multinacionales en México.
+    logros:
+      - "Responsable de toda la ejecución técnica y de la infraestructura del sitio y correo corporativo."
+      - "Sitio en producción sobre Next.js con export estático en Cloudflare Pages, con DNS, SPF, DKIM y DMARC configurados y verificados."
+    stack: ["Next.js", "Tailwind", "Cloudflare Pages", "Zoho Mail"]
+
+proyectos:
+  - id: "proy-cv-agent"
+    nombre: "Agente de CV (este mismo agente)"
+    resumen: >
+      Servidor propio compatible con la especificación Open Responses que
+      expone este CV como agente conversacional, con herramientas, guardarraíles
+      y suite de evaluación automatizada.
+    detalle: >
+      Implementa POST /v1/responses en modo síncrono y streaming SSE, ejecuta un
+      agent loop con herramientas server-side sobre el perfil, cede control al
+      cliente cuando este declara sus propias function tools, y corre una batería
+      de evals de fundamentación (groundedness) en CI antes de cada despliegue.
+    stack: ["Python", "FastAPI", "SSE", "Docker", "Cloud Run", "GitHub Actions"]
+    repo: ""   # VERIFICA: pega la URL del repo público
+
+  - id: "proy-bot-ventas"
+    nombre: "Bot de ventas conversacional en WhatsApp"
+    resumen: >
+      Sistema multiagente que atiende leads entrantes de venta de autos de punta
+      a punta, desde el primer mensaje hasta la cita agendada en el CRM.
+    detalle: >
+      Arquitectura de agente orquestador con subagentes especializados
+      (búsqueda de inventario, valuación, agendamiento). El aprendizaje central
+      fue mover toda decisión que debe ser exacta (horarios, precios,
+      disponibilidad) fuera del LLM hacia nodos deterministas, dejando al modelo
+      la comprensión del lenguaje y la conducción de la conversación.
+    stack: ["n8n", "Azure OpenAI", "LangChain", "SQL Server", "Dynamics 365"]
+
+  - id: "proy-cotizador"
+    nombre: "Cotizador de valuación vehicular"
+    resumen: >
+      Flujo de valuación que le da a un vendedor particular un rango de precio
+      para su auto y lo convierte en cita de compra.
+    detalle: >
+      Incluyó ingeniería inversa de la fórmula de valuación existente para poder
+      reimplementarla y corregir un desfase por kilometraje que estaba
+      produciendo cotizaciones equivocadas en producción.
+    stack: ["n8n", "Azure OpenAI", "PostgreSQL", "Next.js"]
+
+habilidades:
+  - categoria: "IA aplicada y agentes"
+    items: ["Diseño de sistemas multiagente", "Function calling y orquestación de herramientas", "Ingeniería de contexto y de prompts", "RAG y cuándo NO usarlo", "Evaluación y guardarraíles", "Azure OpenAI", "LangChain", "MCP (Model Context Protocol)"]
+  - categoria: "Automatización e integración"
+    items: ["n8n autohospedado", "Diseño de webhooks e idempotencia", "Microsoft Graph API", "Evolution API (WhatsApp)", "Integración con CRM (Dynamics 365)"]
+  - categoria: "Backend y datos"
+    items: ["Python", "TypeScript", "Node.js", "PostgreSQL", "SQL Server", "Firestore", "Redis", "Diseño de esquemas y stored procedures"]
+  - categoria: "Frontend"
+    items: ["Next.js (App Router)", "React", "Tailwind CSS", "Radix UI", "Zod"]
+  - categoria: "Infraestructura y operación"
+    items: ["Docker", "Google Cloud Run", "Firebase (Hosting, Functions, Auth)", "Cloudflare Pages", "Azure APIM", "Secret Manager", "GitHub Actions", "RBAC e IAM"]
+  - categoria: "Dominio"
+    items: ["Retail automotriz", "Financiamiento de inventario (plan piso)", "Convenciones financieras mexicanas: TIIE, IVA, CFDI, base 360"]
+
+educacion:
+  - titulo: ""        # VERIFICA: llénalo o borra la sección completa
+    institucion: ""
+    periodo: ""
+
+certificaciones: []   # VERIFICA: agrega las que tengas, o deja la lista vacía
+
+# Preguntas frecuentes que el agente responde con texto fijo, sin inventar.
+faq:
+  - pregunta: "¿Qué tipo de rol te interesa?"
+    respuesta: >
+      Roles donde la IA tenga que operar sobre sistemas que ya existen, con datos
+      reales y consecuencias reales, no pilotos aislados. Me interesa
+      especialmente el tramo de piloto a producción, que es donde la mayoría de
+      los proyectos de IA se detienen, y es justo el tramo en el que he trabajado
+      los últimos años.
+  - pregunta: "¿Cuál es tu expectativa salarial?"
+    respuesta: >
+      Ese punto prefiero conversarlo directamente con el equipo de reclutamiento,
+      no a través de este agente.
+  - pregunta: "¿Cuál ha sido tu error técnico más caro y qué aprendiste?"
+    respuesta: >
+      Una deriva de intereses en una plataforma financiera: un incremento atómico
+      se aplicaba sobre un saldo que un batch nocturno ya había puesto en cero.
+      El bug era invisible por unidad y sólo aparecía al auditar el agregado.
+      Desde entonces cualquier cálculo financiero que escribo lleva una auditoría
+      que compara el agregado contra una fuente externa, no sólo pruebas
+      unitarias sobre el caso feliz.
