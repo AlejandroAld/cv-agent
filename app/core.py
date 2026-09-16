@@ -29,13 +29,15 @@ ROOT = Path(__file__).resolve().parent.parent
 @dataclass(frozen=True)
 class Settings:
     provider: str = os.getenv("LLM_PROVIDER", "mock").lower()
-    model: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    model: str = os.getenv("LLM_MODEL", "gpt-5-mini")
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
 
     azure_endpoint: str = os.getenv("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
     azure_api_key: str = os.getenv("AZURE_OPENAI_API_KEY", "")
     azure_deployment: str = os.getenv("AZURE_OPENAI_DEPLOYMENT", "")
-    azure_api_version: str = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
+    # La v1 GA no pide api-version. Se deja vacío a propósito; si el recurso
+    # llegara a responder 400 pidiéndola, se define AZURE_OPENAI_API_VERSION=preview.
+    azure_api_version: str = os.getenv("AZURE_OPENAI_API_VERSION", "")
 
     compat_base_url: str = os.getenv("LLM_BASE_URL", "").rstrip("/")
     compat_api_key: str = os.getenv("LLM_API_KEY", "")
@@ -44,6 +46,10 @@ class Settings:
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "http://localhost:8080/v1")
 
     max_tool_iterations: int = int(os.getenv("MAX_TOOL_ITERATIONS", "4"))
+    # Los modelos de razonamiento gastan tokens pensando antes de responder.
+    # "minimal" es lo que este agente necesita: el perfil ya va completo en el
+    # prompt, así que no hay nada que deducir, sólo que citar bien.
+    reasoning_effort: str = os.getenv("REASONING_EFFORT", "minimal")
     request_timeout_s: float = float(os.getenv("REQUEST_TIMEOUT_S", "60"))
     max_input_chars: int = int(os.getenv("MAX_INPUT_CHARS", "24000"))
     profile_path: str = os.getenv("PROFILE_PATH", str(ROOT / "data" / "perfil.yaml"))

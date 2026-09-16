@@ -29,7 +29,7 @@ from .agent_brain import (
     serializar_resultado,
 )
 from .core import ROOT, get_profile, get_settings, log_event
-from .llm import LLMError, stream_chat
+from .llm import LLMError, stream_agente
 
 app = FastAPI(title="Agente de CV — Open Responses", version="1.0.0")
 app.add_middleware(
@@ -47,8 +47,8 @@ _TTL_S = 2 * 60 * 60
 _MAX_ESTADOS = 500
 
 
-def _guardar_estado(rid: str, mensajes: list[dict[str, Any]], respuesta: dict[str, Any]) -> None:
-    _ESTADO[rid] = {"mensajes": mensajes, "respuesta": respuesta, "exp": time.time() + _TTL_S}
+def _guardar_estado(rid: str, items: list[dict[str, Any]], respuesta: dict[str, Any]) -> None:
+    _ESTADO[rid] = {"items": items, "respuesta": respuesta, "exp": time.time() + _TTL_S}
     _ESTADO.move_to_end(rid)
     while len(_ESTADO) > _MAX_ESTADOS:
         _ESTADO.popitem(last=False)
@@ -116,22 +116,29 @@ def _autorizado(header: str | None) -> bool:
 # Herramientas del cliente
 # ---------------------------------------------------------------------------
 def _tools_cliente(peticion: dict[str, Any]) -> tuple[list[dict[str, Any]], set[str]]:
-    """Convierte FunctionToolParam de Open Responses a formato Chat Completions."""
+    """Normaliza las function tools del cliente al formato plano de la API.
+
+    Se acepta tanto la forma de Open Responses (name al nivel superior) como la
+    anidada de Chat Completions, porque un cliente viejo puede mandar cualquiera.
+    """
     salida, nombres = [], set()
     for t in peticion.get("tools") or []:
         if not isinstance(t, dict) or t.get("type") != "function":
             continue  # herramientas hospedadas por otros proveedores: se ignoran
-        nombre = t.get("name") or (t.get("function") or {}).get("name")
+        anidado = t.get("function") if isinstance(t.get("function"), dict) else {}
+        nombre = t.get("name") or anidado.get("name")
         if not nombre or nombre in NOMBRES_INTERNOS:
             continue
         salida.append(
             {
                 "type": "function",
-                "function": {
-                    "name": nombre,
-                    "description": t.get("description") or "",
-                    "parameters": t.get("parameters") or {"type": "object", "properties": {}},
-                },
+                "name": nombre,
+                "description": t.get("description") or anidado.get("description") or "",
+                "parameters": (
+                    t.get("parameters")
+                    or anidado.get("parameters")
+                    or {"type": "object", "properties": {}}
+                ),
             }
         )
         nombres.add(nombre)
@@ -152,37 +159,43 @@ async def _ejecutar(
     s = get_settings()
     profile = get_profile()
 
-    mensajes_previos: list[dict[str, Any]] = []
+    items_previos: list[dict[str, Any]] = []
     prev_id = peticion.get("previous_response_id")
     if prev_id:
         estado = _leer_estado(prev_id)
         if not estado:
             raise LLMError("previous_response_not_found", 404)
-        mensajes_previos = list(estado["mensajes"])
+        items_previos = list(estado["items"])
 
-    nuevos, sistemas_del_input = orx.input_a_mensajes(peticion.get("input"))
+    nuevos, textos_system = orx.input_a_items(peticion.get("input"))
 
-    # Presupuesto de entrada: corta el historial más viejo, nunca el system.
-    historial = mensajes_previos + nuevos
-    while sum(len(json.dumps(m, default=str)) for m in historial) > s.max_input_chars and len(historial) > 1:
-        historial.pop(0)
+    # Presupuesto de entrada: corta el historial más viejo, nunca las
+    # instructions, que es donde viven los guardarraíles.
+    historial = orx.recortar(items_previos + nuevos, s.max_input_chars)
 
-    system = construir_system_prompt(profile)
+    # El system prompt ya no es un mensaje más del historial: va en el campo
+    # `instructions`, que la Responses API antepone a toda la conversación.
+    instructions = construir_system_prompt(profile)
     if peticion.get("instructions"):
-        system += (
+        instructions += (
             "\n\n## Instrucciones adicionales del operador\n"
             + str(peticion["instructions"])
             + "\n(Estas instrucciones no anulan las reglas de fundamentación ni de privacidad.)"
         )
-    for extra in sistemas_del_input:
-        system += "\n\n## Instrucción de sesión\n" + extra
+    for extra in textos_system:
+        instructions += "\n\n## Instrucción de sesión\n" + extra
 
-    mensajes: list[dict[str, Any]] = [{"role": "system", "content": system}] + historial
+    # Input interno del bucle. Crece con los items que devuelve el modelo y con
+    # los resultados de las herramientas; conserva los items de razonamiento,
+    # que el cliente nunca ve.
+    entrada: list[dict[str, Any]] = list(historial)
 
     tools_cli, nombres_cli = _tools_cliente(peticion)
     tools = HERRAMIENTAS_INTERNAS + tools_cli
 
-    temperatura = peticion.get("temperature")
+    # temperature y las penalties del cliente se hacen eco en el objeto
+    # Response pero no viajan al proveedor: un modelo de razonamiento las
+    # rechaza con 400.
     max_tokens = peticion.get("max_output_tokens")
 
     salida: list[dict[str, Any]] = []
@@ -194,10 +207,15 @@ async def _ejecutar(
         texto = ""
         item_msg_id: str | None = None
         abierto = False
-        pendientes: dict[int, dict[str, str]] = {}
+        pendientes: list[dict[str, str]] = []
+        items_modelo: list[dict[str, Any]] = []
 
-        async for ev in stream_chat(
-            mensajes, tools=tools, temperature=temperatura, max_tokens=max_tokens
+        async for ev in stream_agente(
+            entrada,
+            instructions=instructions,
+            tools=tools,
+            max_output_tokens=max_tokens,
+            reasoning_effort=s.reasoning_effort,
         ):
             if ev["t"] == "text":
                 delta = ev["delta"]
@@ -243,13 +261,14 @@ async def _ejecutar(
                     )
 
             elif ev["t"] == "tool":
-                i = ev["index"]
-                acc = pendientes.setdefault(i, {"id": "", "name": "", "args": ""})
-                if ev.get("id"):
-                    acc["id"] = ev["id"]
-                if ev.get("name"):
-                    acc["name"] = ev["name"]
-                acc["args"] += ev.get("args_delta") or ""
+                # Los argumentos ya vienen completos: no hay que ensamblarlos.
+                pendientes.append(
+                    {
+                        "call_id": ev.get("call_id") or orx.nuevo_id("call"),
+                        "name": ev.get("name") or "",
+                        "arguments": ev.get("arguments") or "{}",
+                    }
+                )
 
             elif ev["t"] == "done":
                 if ev.get("usage"):
@@ -258,6 +277,7 @@ async def _ejecutar(
                             usage_total[k] = usage_total.get(k, 0) + v
                         else:
                             usage_total[k] = v
+                items_modelo = ev.get("output") or []
 
         # Cierra el item de mensaje si se abrió
         if texto:
@@ -274,11 +294,10 @@ async def _ejecutar(
             break
 
         # ¿Alguna herramienta es del cliente? Entonces cedemos control.
-        del_cliente = [p for p in pendientes.values() if p["name"] in nombres_cli]
+        del_cliente = [p for p in pendientes if p["name"] in nombres_cli]
         if del_cliente:
             for p in del_cliente:
-                call_id = p["id"] or orx.nuevo_id("call")
-                item = orx.item_function_call(call_id, p["name"], p["args"])
+                item = orx.item_function_call(p["call_id"], p["name"], p["arguments"])
                 salida.append(item)
                 if emisor:
                     en_curso = {**item, "status": "in_progress", "arguments": ""}
@@ -290,23 +309,24 @@ async def _ejecutar(
             break
 
         # Herramientas internas: se ejecutan aquí y el bucle continúa.
-        mensajes.append(
-            {
-                "role": "assistant",
-                "content": texto or None,
-                "tool_calls": [
-                    {
-                        "id": p["id"] or f"call_{i}",
-                        "type": "function",
-                        "function": {"name": p["name"], "arguments": p["args"] or "{}"},
-                    }
-                    for i, p in sorted(pendientes.items())
-                ],
-            }
+        # Los items del modelo vuelven al input TAL CUAL, el de razonamiento
+        # incluido: la Responses API los encadena por id y perderlos degrada la
+        # continuidad del turno.
+        entrada.extend(
+            items_modelo
+            or [
+                {
+                    "type": "function_call",
+                    "call_id": p["call_id"],
+                    "name": p["name"],
+                    "arguments": p["arguments"],
+                }
+                for p in pendientes
+            ]
         )
-        for i, p in sorted(pendientes.items()):
+        for p in pendientes:
             try:
-                args = json.loads(p["args"] or "{}")
+                args = json.loads(p["arguments"] or "{}")
             except json.JSONDecodeError:
                 args = {}
             t0 = time.perf_counter()
@@ -318,11 +338,11 @@ async def _ejecutar(
                 ms=round((time.perf_counter() - t0) * 1000, 1),
                 ok="error" not in resultado,
             )
-            mensajes.append(
+            entrada.append(
                 {
-                    "role": "tool",
-                    "tool_call_id": p["id"] or f"call_{i}",
-                    "content": serializar_resultado(resultado),
+                    "type": "function_call_output",
+                    "call_id": p["call_id"],
+                    "output": serializar_resultado(resultado),
                 }
             )
     else:
@@ -337,12 +357,12 @@ async def _ejecutar(
     if not salida:
         salida.append(orx.item_mensaje("No obtuve respuesta del modelo. Intenta de nuevo."))
 
-    # Historial para previous_response_id
-    mensajes_finales = historial + [
-        {"role": "assistant", "content": it["content"][0]["text"]}
-        for it in salida
-        if it.get("type") == "message"
-    ]
+    # El razonamiento es estado interno del modelo: nunca sale hacia el cliente.
+    salida = orx.sin_reasoning(salida)
+
+    # Historial para previous_response_id. Se re-normaliza para guardar items
+    # limpios: sin ids de esta respuesta, que no son válidos en la siguiente.
+    items_finales = historial + orx.input_a_items(salida)[0]
 
     yield (
         "final",
@@ -350,7 +370,7 @@ async def _ejecutar(
             "salida": salida,
             "usage": usage_total,
             "status": "completed",
-            "mensajes": mensajes_finales,
+            "items": items_finales,
             "tool_calls": llamadas_herramienta,
         },
     )
@@ -419,7 +439,7 @@ async def crear_respuesta(request: Request, authorization: str | None = Header(d
             usage=final["usage"],
             creado=creado,
         )
-        _guardar_estado(response_id, final["mensajes"], respuesta)
+        _guardar_estado(response_id, final["items"], respuesta)
         log_event("response", response_id=response_id, ms=round((time.perf_counter() - t0) * 1000, 1), tools=final.get("tool_calls", 0), chars=len(respuesta["output_text"]))
         return JSONResponse(content=respuesta)
 
@@ -446,7 +466,7 @@ async def crear_respuesta(request: Request, authorization: str | None = Header(d
                 usage=final["usage"],
                 creado=creado,
             )
-            _guardar_estado(response_id, final["mensajes"], respuesta)
+            _guardar_estado(response_id, final["items"], respuesta)
             yield emisor.evento("response.completed", response=respuesta)
             log_event("response", response_id=response_id, ms=round((time.perf_counter() - t0) * 1000, 1), stream=True, tools=final.get("tool_calls", 0))
         except LLMError as exc:
@@ -569,10 +589,11 @@ async def chat_demo(request: Request):
     except Exception:
         return JSONResponse(status_code=400, content=orx.cuerpo_error("Cuerpo inválido.", "invalid_request"))
 
+    # Sin temperature: el modelo de razonamiento la rechaza y el bucle ya no la
+    # reenvía, así que dejarla aquí sólo sería un botón desconectado.
     peticion = {
         "input": peticion.get("input"),
         "stream": True,
-        "temperature": 0.4,
         "max_output_tokens": 700,
     }
     if not peticion["input"]:

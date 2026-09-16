@@ -12,7 +12,7 @@ REGION="${REGION:-us-central1}"
 SERVICE="${SERVICE:-cv-agent}"
 AGENT_API_KEY="${AGENT_API_KEY:?define AGENT_API_KEY}"
 OPENAI_API_KEY="${OPENAI_API_KEY:?define OPENAI_API_KEY}"
-LLM_MODEL="${LLM_MODEL:-gpt-4o-mini}"
+LLM_MODEL="${LLM_MODEL:-gpt-5-mini}"
 
 gcloud config set project "$PROJECT_ID"
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com

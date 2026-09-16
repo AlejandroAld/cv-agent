@@ -53,7 +53,7 @@ Navegador (demo del sitio)        Cualquier cliente Open Responses
 │         │  ↓ cede control (function_call) │               │
 │         └───────────────┬─────────────────┘               │
 │                         ▼                                 │
-│        traducción Open Responses ⇄ Chat Completions       │
+│        Responses API · sin temperature ni max_tokens      │
 └─────────────────────────┬─────────────────────────────────┘
                           ▼
          Azure OpenAI · OpenAI · cualquier API compatible
@@ -62,13 +62,13 @@ Navegador (demo del sitio)        Cualquier cliente Open Responses
 | Archivo | Qué resuelve |
 |---|---|
 | `app/main.py` | Endpoints, autenticación, bucle agéntico, emisión SSE, demo pública |
-| `app/openresponses.py` | Traducción del formato de cable en ambos sentidos |
+| `app/openresponses.py` | Normalización de items, objeto Response, higiene del historial |
 | `app/llm.py` | Capa de proveedor, streaming normalizado, mock determinista |
 | `app/agent_brain.py` | System prompt, guardarraíles, herramientas internas |
 | `app/core.py` | Configuración, logging estructurado, carga y búsqueda del perfil |
 | `app/static/index.html` | Interfaz de chat del sitio personal |
 | `data/perfil.yaml` | **Fuente única de verdad.** Todo hecho que el agente afirma vive aquí |
-| `tests/` | 24 tests de contrato contra el spec |
+| `tests/` | 36 tests de contrato contra el spec y contra el cuerpo que sale al proveedor |
 | `evals/` | Batería de 24 casos, mitad adversariales |
 
 ---
@@ -130,19 +130,38 @@ hospedadas externamente. Este servidor implementa ambos casos:
 Un servidor que sólo contemple sus propias herramientas se rompe cuando el
 cliente trae las suyas.
 
-### Chat Completions por debajo, Open Responses por fuera
+### Responses API por debajo, Open Responses por fuera
 
-El servidor habla Open Responses hacia afuera y Chat Completions hacia adentro.
-Esa traducción vive aislada en `openresponses.py` y `llm.py`.
+El servidor habla Open Responses hacia afuera y la Responses API hacia adentro.
+Son casi el mismo formato de items, así que `openresponses.py` ya no traduce
+dialectos: normaliza lo que manda el cliente y arma el objeto Response.
 
-Chat Completions está disponible en todos los proveedores, así que cambiar de
-modelo es una variable de entorno. Desplegado corre sobre Azure OpenAI, porque es
-lo que una organización regulada puede operar de verdad, pero la abstracción
-significa que migrar no es rearquitectura.
+Nació sobre Chat Completions y migró al adoptar un modelo de razonamiento. No
+fue una migración estética: la serie GPT-5 **rechaza `temperature`, `top_p` y
+las penalties**, usa `max_completion_tokens` en vez de `max_tokens`, y para tool
+calling requiere esta API. El cuerpo viejo devuelve 400.
+
+Lo que el cliente manda y lo que sale al proveedor dejaron de ser lo mismo:
+`temperature` se sigue aceptando y se hace eco en el objeto Response —el spec
+lo pide— pero **no viaja**. Un test afirma esa ausencia, porque es la clase de
+campo que alguien vuelve a colar sin querer y que sólo falla en producción.
+
+El system prompt tampoco es ya un mensaje más del historial: va en
+`instructions`, que la API antepone a toda la conversación. Los guardarraíles
+dejaron de competir por espacio con el historial.
+
+Cambiar de proveedor sigue siendo una variable de entorno: azure, openai,
+compatible o mock. Desplegado corre sobre Azure OpenAI, porque es lo que una
+organización regulada puede operar de verdad. Para un modelo sin razonamiento
+se apaga el bloque con `REASONING_EFFORT=""`.
 
 El streaming es real, no simulado: los deltas del proveedor se reenvían token a
 token. Un test verifica que **concatenar los deltas reproduce exactamente el
 texto final**, la falla silenciosa clásica de los servidores SSE escritos a mano.
+
+Los items de razonamiento son estado interno del modelo: vuelven al proveedor en
+la siguiente vuelta del bucle, pero **nunca salen hacia el cliente**. También
+hay un test para eso.
 
 ### Dos superficies, dos modelos de seguridad
 
@@ -212,7 +231,7 @@ Kubernetes y core bancario, que no tengo, y aprueba sólo si el agente señala
 explícitamente lo que no cubre. Un agente que se vende como encaje perfecto
 reprueba ese test.
 
-Aparte, 24 tests de contrato corren con un proveedor mock, sin credenciales y sin
+Aparte, 36 tests de contrato corren con un proveedor mock, sin credenciales y sin
 gastar tokens, y validan el protocolo: campos requeridos, orden de eventos SSE,
 monotonía de `sequence_number`, `event:` coincidiendo con `type`, terminal
 `[DONE]` y códigos de error.
@@ -249,9 +268,9 @@ python evals/run_evals.py --base-url http://localhost:8080/v1
 ## Desplegar
 
 ```bash
-export AZURE_OPENAI_ENDPOINT="https://....services.ai.azure.com"
+export AZURE_OPENAI_ENDPOINT="https://<recurso>.openai.azure.com/openai/v1"
 export AZURE_OPENAI_API_KEY="..."
-export AZURE_OPENAI_DEPLOYMENT="gpt-4o-mini"
+export AZURE_OPENAI_DEPLOYMENT="gpt-5-mini"
 export AGENT_API_KEY="$(openssl rand -hex 24)"
 ./scripts/deploy_azure.sh
 ```

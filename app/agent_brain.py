@@ -77,78 +77,72 @@ def construir_system_prompt(profile: Profile | None = None) -> str:
 # ---------------------------------------------------------------------------
 # Herramientas internas (se ejecutan aquí, el cliente nunca las ve ejecutarse)
 # ---------------------------------------------------------------------------
+# Formato plano de la Responses API: name/description/parameters van al nivel
+# superior del objeto, sin el anidado "function" de Chat Completions.
 HERRAMIENTAS_INTERNAS: list[dict[str, Any]] = [
     {
         "type": "function",
-        "function": {
-            "name": "buscar_en_perfil",
-            "description": (
-                "Busca experiencias y proyectos del perfil por tecnología, dominio "
-                "o palabra clave. Úsala cuando pregunten por una tecnología o tema "
-                "específico y quieras citar los registros exactos."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "consulta": {
-                        "type": "string",
-                        "description": "Términos a buscar, p. ej. 'n8n WhatsApp' o 'Firebase RBAC'.",
-                    },
-                    "limite": {"type": "integer", "description": "Máximo de resultados (1-8).", "default": 4},
+        "name": "buscar_en_perfil",
+        "description": (
+            "Busca experiencias y proyectos del perfil por tecnología, dominio "
+            "o palabra clave. Úsala cuando pregunten por una tecnología o tema "
+            "específico y quieras citar los registros exactos."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "consulta": {
+                    "type": "string",
+                    "description": "Términos a buscar, p. ej. 'n8n WhatsApp' o 'Firebase RBAC'.",
                 },
-                "required": ["consulta"],
+                "limite": {"type": "integer", "description": "Máximo de resultados (1-8).", "default": 4},
             },
+            "required": ["consulta"],
         },
     },
     {
         "type": "function",
-        "function": {
-            "name": "obtener_detalle",
-            "description": (
-                "Devuelve el registro completo de una experiencia o proyecto por su id "
-                "(p. ej. 'exp-plan-piso', 'proy-bot-ventas'). Úsala cuando pidan profundidad "
-                "sobre algo concreto."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {"id": {"type": "string", "description": "El id del registro."}},
-                "required": ["id"],
-            },
+        "name": "obtener_detalle",
+        "description": (
+            "Devuelve el registro completo de una experiencia o proyecto por su id "
+            "(p. ej. 'exp-plan-piso', 'proy-bot-ventas'). Úsala cuando pidan profundidad "
+            "sobre algo concreto."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"id": {"type": "string", "description": "El id del registro."}},
+            "required": ["id"],
         },
     },
     {
         "type": "function",
-        "function": {
-            "name": "evaluar_encaje",
-            "description": (
-                "Compara el perfil contra el texto de una vacante o una lista de requisitos "
-                "y devuelve, por requisito, la evidencia encontrada o la ausencia de ella. "
-                "Úsala cuando peguen una descripción de puesto o pregunten '¿encajas en...?'."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "requisitos": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Cada requisito o tecnología a evaluar, por separado.",
-                    }
-                },
-                "required": ["requisitos"],
+        "name": "evaluar_encaje",
+        "description": (
+            "Compara el perfil contra el texto de una vacante o una lista de requisitos "
+            "y devuelve, por requisito, la evidencia encontrada o la ausencia de ella. "
+            "Úsala cuando peguen una descripción de puesto o pregunten '¿encajas en...?'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "requisitos": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Cada requisito o tecnología a evaluar, por separado.",
+                }
             },
+            "required": ["requisitos"],
         },
     },
     {
         "type": "function",
-        "function": {
-            "name": "obtener_contacto",
-            "description": "Devuelve los canales de contacto públicos. Úsala si preguntan cómo contactar.",
-            "parameters": {"type": "object", "properties": {}},
-        },
+        "name": "obtener_contacto",
+        "description": "Devuelve los canales de contacto públicos. Úsala si preguntan cómo contactar.",
+        "parameters": {"type": "object", "properties": {}},
     },
 ]
 
-NOMBRES_INTERNOS = {t["function"]["name"] for t in HERRAMIENTAS_INTERNAS}
+NOMBRES_INTERNOS = {t["name"] for t in HERRAMIENTAS_INTERNAS}
 
 
 def ejecutar_herramienta(nombre: str, argumentos: dict[str, Any]) -> dict[str, Any]:

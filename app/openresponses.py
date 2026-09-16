@@ -1,4 +1,8 @@
-"""Traducción entre el formato de cable Open Responses y Chat Completions.
+"""Formato de cable Open Responses: normalización de entrada y armado de salida.
+
+El proveedor consume los mismos items que expone el spec, así que aquí ya no
+hay traducción de formato: hay normalización de lo que manda el cliente y
+construcción del objeto Response que se le devuelve.
 
 Referencia: https://www.openresponses.org/specification
 """
@@ -16,89 +20,127 @@ def nuevo_id(prefijo: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Entrada: items Open Responses -> mensajes Chat Completions
+# Entrada: normalización a items de Open Responses
 # ---------------------------------------------------------------------------
-def _partes_a_contenido(partes: Any) -> Any:
-    """Convierte content (string o lista de partes) al formato del proveedor."""
-    if isinstance(partes, str):
-        return partes
-    if not isinstance(partes, list):
-        return ""
+# La Responses API consume los mismos items que expone Open Responses, así que
+# aquí ya no se traduce a mensajes de chat: sólo se normaliza lo que manda el
+# cliente a la forma exacta que el proveedor acepta.
 
-    trozos: list[dict[str, Any]] = []
-    solo_texto = True
+_PARTES_TEXTO = ("input_text", "output_text", "text", "summary_text")
+
+
+def _tipo_texto(rol: str) -> str:
+    return "output_text" if rol == "assistant" else "input_text"
+
+
+def _item_usuario(texto: str) -> dict[str, Any]:
+    return {"type": "message", "role": "user", "content": [{"type": "input_text", "text": texto}]}
+
+
+def _normalizar_contenido(partes: Any, rol: str) -> list[dict[str, Any]]:
+    """Content de un item message, en partes válidas para la Responses API.
+
+    El tipo de la parte depende del rol: la API rechaza un `input_text` dentro
+    de un mensaje del assistant y un `output_text` dentro de uno del usuario,
+    así que se fuerza el que corresponde en vez de confiar en lo que llegó.
+    """
+    tipo_txt = _tipo_texto(rol)
+
+    if isinstance(partes, str):
+        return [{"type": tipo_txt, "text": partes}] if partes else []
+    if not isinstance(partes, list):
+        return []
+
+    salida: list[dict[str, Any]] = []
     for parte in partes:
-        if not isinstance(parte, dict):
-            if isinstance(parte, str):
-                trozos.append({"type": "text", "text": parte})
+        if isinstance(parte, str):
+            if parte:
+                salida.append({"type": tipo_txt, "text": parte})
             continue
+        if not isinstance(parte, dict):
+            continue
+
         tipo = parte.get("type")
-        if tipo in ("input_text", "output_text", "text"):
-            trozos.append({"type": "text", "text": parte.get("text", "")})
+        if tipo in _PARTES_TEXTO:
+            texto = parte.get("text", "")
+            if texto:
+                salida.append({"type": tipo_txt, "text": texto})
         elif tipo == "refusal":
-            trozos.append({"type": "text", "text": parte.get("refusal", "")})
-        elif tipo == "input_image":
+            texto = parte.get("refusal", "")
+            if texto:
+                salida.append({"type": tipo_txt, "text": texto})
+        elif tipo == "input_image" and rol != "assistant":
             url = parte.get("image_url")
             if url:
-                solo_texto = False
-                trozos.append({"type": "image_url", "image_url": {"url": url, "detail": parte.get("detail", "auto")}})
+                salida.append(
+                    {"type": "input_image", "image_url": url, "detail": parte.get("detail", "auto")}
+                )
         elif tipo == "input_file":
             nombre = parte.get("filename") or parte.get("file_url") or "archivo"
-            trozos.append({"type": "text", "text": f"[archivo adjunto: {nombre}]"})
+            salida.append({"type": tipo_txt, "text": f"[archivo adjunto: {nombre}]"})
 
-    if solo_texto:
-        return "\n".join(t.get("text", "") for t in trozos).strip()
-    return trozos
+    return salida
 
 
-def input_a_mensajes(entrada: Any) -> tuple[list[dict[str, Any]], list[str]]:
-    """Devuelve (mensajes de chat, instrucciones de rol system/developer)."""
-    mensajes: list[dict[str, Any]] = []
+def _texto_plano(contenido: Any) -> str:
+    """Aplana el content de un mensaje system/developer a texto."""
+    if isinstance(contenido, str):
+        return contenido.strip()
+    partes = _normalizar_contenido(contenido, "user")
+    return "\n".join(p.get("text", "") for p in partes if p.get("type") == "input_text").strip()
+
+
+def input_a_items(entrada: Any) -> tuple[list[dict[str, Any]], list[str]]:
+    """Normaliza el campo `input` a items de Open Responses.
+
+    Devuelve (items, textos_system). Los roles system/developer no viajan como
+    items: se extraen aparte para concatenarlos a `instructions`, que es donde
+    la Responses API espera las reglas del agente.
+    """
+    items: list[dict[str, Any]] = []
     sistemas: list[str] = []
 
     if entrada is None:
-        return mensajes, sistemas
+        return items, sistemas
     if isinstance(entrada, str):
-        return [{"role": "user", "content": entrada}], sistemas
+        return ([_item_usuario(entrada)] if entrada else []), sistemas
     if isinstance(entrada, dict):
         entrada = [entrada]
-
-    pendientes_tool: dict[str, str] = {}
+    if not isinstance(entrada, list):
+        return items, sistemas
 
     for item in entrada:
+        if isinstance(item, str):
+            if item:
+                items.append(_item_usuario(item))
+            continue
         if not isinstance(item, dict):
-            if isinstance(item, str):
-                mensajes.append({"role": "user", "content": item})
             continue
 
         tipo = item.get("type") or ("message" if item.get("role") else None)
 
         if tipo == "message":
-            rol = item.get("role", "user")
-            contenido = _partes_a_contenido(item.get("content"))
-            if rol in ("system", "developer"):
-                if contenido:
-                    sistemas.append(contenido if isinstance(contenido, str) else json.dumps(contenido))
+            rol_crudo = item.get("role", "user")
+            if rol_crudo in ("system", "developer"):
+                texto = _texto_plano(item.get("content"))
+                if texto:
+                    sistemas.append(texto)
                 continue
-            if rol == "assistant":
-                mensajes.append({"role": "assistant", "content": contenido or ""})
-            else:
-                mensajes.append({"role": "user", "content": contenido})
+            rol = "assistant" if rol_crudo == "assistant" else "user"
+            contenido = _normalizar_contenido(item.get("content"), rol)
+            if not contenido:
+                if rol == "assistant":
+                    continue  # un turno vacío del assistant no aporta contexto
+                contenido = [{"type": "input_text", "text": ""}]
+            items.append({"type": "message", "role": rol, "content": contenido})
 
         elif tipo == "function_call":
-            call_id = item.get("call_id") or item.get("id") or nuevo_id("call")
-            pendientes_tool[call_id] = item.get("name", "")
-            mensajes.append(
+            items.append(
                 {
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [
-                        {
-                            "id": call_id,
-                            "type": "function",
-                            "function": {"name": item.get("name", ""), "arguments": item.get("arguments", "{}")},
-                        }
-                    ],
+                    "type": "function_call",
+                    "call_id": item.get("call_id") or item.get("id") or nuevo_id("call"),
+                    "name": item.get("name", ""),
+                    "arguments": item.get("arguments") or "{}",
                 }
             )
 
@@ -106,12 +148,61 @@ def input_a_mensajes(entrada: Any) -> tuple[list[dict[str, Any]], list[str]]:
             salida = item.get("output")
             if not isinstance(salida, str):
                 salida = json.dumps(salida, ensure_ascii=False, default=str)
-            mensajes.append({"role": "tool", "tool_call_id": item.get("call_id", ""), "content": salida})
+            items.append(
+                {"type": "function_call_output", "call_id": item.get("call_id", ""), "output": salida}
+            )
 
-        # reasoning / compaction / item_reference: se ignoran, este servidor no
-        # los persiste y el spec permite tratarlos como opacos.
+        # reasoning / compaction / item_reference del cliente: se ignoran. Un
+        # item de razonamiento sólo es válido junto al id que emitió el propio
+        # proveedor, así que reenviar el de otra respuesta sería un 400.
 
-    return mensajes, sistemas
+    return items, sistemas
+
+
+# ---------------------------------------------------------------------------
+# Higiene del historial
+# ---------------------------------------------------------------------------
+def sin_reasoning(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Quita los items de razonamiento.
+
+    El razonamiento es estado interno del modelo: vuelve al proveedor en la
+    siguiente vuelta del bucle, pero nunca sale hacia el cliente.
+    """
+    return [i for i in items if i.get("type") != "reasoning"]
+
+
+def _tamano(items: list[dict[str, Any]]) -> int:
+    return sum(len(json.dumps(i, default=str)) for i in items)
+
+
+def _call_id(item: dict[str, Any]) -> str:
+    return item.get("call_id") or item.get("id") or ""
+
+
+def recortar(items: list[dict[str, Any]], max_chars: int) -> list[dict[str, Any]]:
+    """Corta el historial más viejo hasta caber en el presupuesto de entrada.
+
+    Nunca deja un `function_call_output` huérfano: si el recorte se lleva un
+    `function_call`, se lleva también su resultado. Un output sin su llamada no
+    es una respuesta degradada, es un 400 del proveedor.
+    """
+    restantes = list(items)
+
+    while _tamano(restantes) > max_chars and len(restantes) > 1:
+        fuera = restantes.pop(0)
+        if fuera.get("type") == "function_call":
+            cid = _call_id(fuera)
+            restantes = [
+                i
+                for i in restantes
+                if not (i.get("type") == "function_call_output" and _call_id(i) == cid)
+            ]
+
+    # Y al revés: un output cuya llamada ya no está también se descarta.
+    llamadas = {_call_id(i) for i in restantes if i.get("type") == "function_call"}
+    return [
+        i for i in restantes if i.get("type") != "function_call_output" or _call_id(i) in llamadas
+    ]
 
 
 # ---------------------------------------------------------------------------

@@ -2,11 +2,16 @@
 # Despliegue a Azure Container Apps desde codigo fuente.
 # Corre en Azure Cloud Shell o en Codespaces. No requiere Docker local.
 #
-#   export AZURE_OPENAI_ENDPOINT="https://....services.ai.azure.com"
+#   export AZURE_OPENAI_ENDPOINT="https://<recurso>.openai.azure.com/openai/v1"
 #   export AZURE_OPENAI_API_KEY="..."
-#   export AZURE_OPENAI_DEPLOYMENT="gpt-4o-mini"
+#   export AZURE_OPENAI_DEPLOYMENT="gpt-5-mini"
 #   export AGENT_API_KEY="$(openssl rand -hex 24)"
 #   ./scripts/deploy_azure.sh
+#
+# El endpoint es el que da el portal de Foundry, con el sufijo /openai/v1 (se
+# acepta sin el sufijo tambien). La v1 GA no pide api-version: solo si el
+# recurso llegara a responder 400 pidiendola, se define
+# AZURE_OPENAI_API_VERSION=preview.
 set -euo pipefail
 
 RG="${RG:-rg-cv-agent}"
@@ -49,7 +54,6 @@ az containerapp update -n "$APP" -g "$RG" \
     "LLM_PROVIDER=azure" \
     "AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}" \
     "AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT}" \
-    "AZURE_OPENAI_API_VERSION=2024-10-21" \
     "AZURE_OPENAI_API_KEY=secretref:aoai-key" \
     "AGENT_API_KEY=secretref:agent-key" \
     "PUBLIC_BASE_URL=https://${FQDN}/v1" \
