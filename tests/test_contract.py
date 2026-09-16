@@ -618,3 +618,58 @@ def test_reasoning_se_puede_apagar_para_modelos_sin_razonamiento():
 
     sin = construir_cuerpo([], None, None, None, "", "gpt-4o-mini")
     assert "reasoning" not in sin, 'REASONING_EFFORT="" debe omitir el bloque'
+
+
+# --- autenticación ---------------------------------------------------------
+def test_token_no_ascii_no_revienta(monkeypatch):
+    """compare_digest sobre str exige ASCII y lanza TypeError; por eso bytes.
+
+    No va por HTTP a propósito: httpx se niega a enviar un header no ASCII,
+    pero Starlette decodifica los headers entrantes como latin-1, así que un
+    byte alto SÍ llega hasta aquí como texto. Se prueba la función directa.
+    """
+    import app.main as main
+    from app.core import Settings
+
+    monkeypatch.setattr(main, "get_settings", lambda: Settings(agent_api_key="test-key"))
+
+    assert main._autorizado("Bearer clavé-con-acentó") is False
+    assert main._autorizado("Bearer test-key") is True
+
+
+def test_token_de_otra_longitud_da_401(cli):
+    for token in ("", "x", "test-key-mas-largo", "test-ke"):
+        r = cli.post("/v1/responses", headers={"Authorization": f"Bearer {token}"}, json={"input": "hola"})
+        assert r.status_code == 401, f"token {token!r} no debió pasar"
+
+
+def test_token_correcto_con_y_sin_prefijo_bearer(cli):
+    assert cli.post("/v1/responses", headers={"Authorization": "Bearer test-key"}, json={"input": "hola"}).status_code == 200
+    assert cli.post("/v1/responses", headers={"Authorization": "test-key"}, json={"input": "hola"}).status_code == 200
+
+
+# --- store -----------------------------------------------------------------
+def test_store_por_defecto_retiene(cli):
+    """Default true, como la plataforma: sin el flag, la respuesta se guarda."""
+    d = cli.post("/v1/responses", headers=H, json={"input": "hola"}).json()
+    assert d["store"] is True, "el eco debe decir la verdad"
+    assert cli.get(f"/v1/responses/{d['id']}", headers=H).status_code == 200
+
+
+def test_store_false_no_retiene_nada(cli):
+    """Quien pide store:false obtiene lo que pidió: nada queda."""
+    d = cli.post("/v1/responses", headers=H, json={"input": "hola", "store": False}).json()
+    assert d["store"] is False
+
+    assert cli.get(f"/v1/responses/{d['id']}", headers=H).status_code == 404
+
+    encadenada = cli.post("/v1/responses", headers=H, json={"input": "sigue", "previous_response_id": d["id"]})
+    assert encadenada.status_code == 404
+    assert encadenada.json()["error"]["code"] == "previous_response_not_found"
+
+
+def test_store_false_tambien_se_respeta_en_streaming(cli):
+    eventos = _sse(cli, {"input": "hola", "stream": True, "store": False})
+    final = next(p for t, p in eventos if t == "response.completed")["response"]
+    assert final["store"] is False
+    assert cli.get(f"/v1/responses/{final['id']}", headers=H).status_code == 404

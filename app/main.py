@@ -9,6 +9,7 @@ Superficie pública:
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import time
@@ -52,6 +53,16 @@ def _guardar_estado(rid: str, items: list[dict[str, Any]], respuesta: dict[str, 
     _ESTADO.move_to_end(rid)
     while len(_ESTADO) > _MAX_ESTADOS:
         _ESTADO.popitem(last=False)
+
+
+def _quiere_guardar(peticion: dict[str, Any]) -> bool:
+    """Respeta el flag `store` del cliente. Default true, como la plataforma.
+
+    Con `store: false` no se retiene nada: ni `GET /v1/responses/{id}` ni un
+    `previous_response_id` apuntando a esa respuesta la encuentran después.
+    Es lo que pidió quien la mandó.
+    """
+    return bool(peticion.get("store", True))
 
 
 def _leer_estado(rid: str) -> dict[str, Any] | None:
@@ -106,10 +117,10 @@ def _autorizado(header: str | None) -> bool:
     if not header:
         return False
     token = header[7:].strip() if header.lower().startswith("bearer ") else header.strip()
-    # comparación en tiempo constante
-    if len(token) != len(esperado):
-        return False
-    return sum(a != b for a, b in zip(token, esperado)) == 0
+    # compare_digest no ramifica ni por contenido ni por longitud. Se compara
+    # en bytes para que un token con caracteres no ASCII no reviente: sobre str
+    # compare_digest exige ASCII y lanza TypeError.
+    return hmac.compare_digest(token.encode("utf-8"), esperado.encode("utf-8"))
 
 
 # ---------------------------------------------------------------------------
@@ -439,7 +450,8 @@ async def crear_respuesta(request: Request, authorization: str | None = Header(d
             usage=final["usage"],
             creado=creado,
         )
-        _guardar_estado(response_id, final["items"], respuesta)
+        if _quiere_guardar(peticion):
+            _guardar_estado(response_id, final["items"], respuesta)
         log_event("response", response_id=response_id, ms=round((time.perf_counter() - t0) * 1000, 1), tools=final.get("tool_calls", 0), chars=len(respuesta["output_text"]))
         return JSONResponse(content=respuesta)
 
@@ -466,7 +478,8 @@ async def crear_respuesta(request: Request, authorization: str | None = Header(d
                 usage=final["usage"],
                 creado=creado,
             )
-            _guardar_estado(response_id, final["items"], respuesta)
+            if _quiere_guardar(peticion):
+                _guardar_estado(response_id, final["items"], respuesta)
             yield emisor.evento("response.completed", response=respuesta)
             log_event("response", response_id=response_id, ms=round((time.perf_counter() - t0) * 1000, 1), stream=True, tools=final.get("tool_calls", 0))
         except LLMError as exc:

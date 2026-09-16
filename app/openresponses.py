@@ -279,7 +279,8 @@ def construir_response(
         "reasoning": {"effort": (peticion.get("reasoning") or {}).get("effort"), "summary": None},
         "max_output_tokens": peticion.get("max_output_tokens"),
         "max_tool_calls": peticion.get("max_tool_calls"),
-        "store": bool(peticion.get("store", False)),
+        # Default true, como la plataforma. El servidor lo respeta: ver _guardar_estado.
+        "store": bool(peticion.get("store", True)),
         "background": bool(peticion.get("background", False)),
         "service_tier": peticion.get("service_tier") or "default",
         "metadata": peticion.get("metadata") or {},

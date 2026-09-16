@@ -1,0 +1,33 @@
+# Lo que nunca debe entrar al contexto de build.
+# Importa de verdad: `az containerapp up --source .` y `gcloud run deploy
+# --source .` suben el contexto entero.
+
+.git
+.gitignore
+.github
+.devcontainer
+
+# Credenciales: que no acaben en una capa de la imagen
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# No se ejecutan dentro del contenedor
+tests/
+evals/
+scripts/
+evals/reports/
+
+# Docs y artefactos locales
+README.md
+LICENSE
+*.md
+.DS_Store

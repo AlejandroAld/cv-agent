@@ -1,0 +1,32 @@
+{
+  "name": "cv-agent",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": {
+    "ghcr.io/devcontainers/features/azure-cli:1": {}
+  },
+  "postCreateCommand": "pip install --no-cache-dir -r requirements.txt pytest && cp -n .env.example .env || true",
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": { "label": "agente de CV", "onAutoForward": "notify" }
+  },
+  "containerEnv": {
+    "LLM_PROVIDER": "mock",
+    "AGENT_API_KEY": "dev-local",
+    "PYTHONUNBUFFERED": "1"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests"]
+      }
+    }
+  },
+  "remoteUser": "vscode"
+}

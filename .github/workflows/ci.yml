@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# Un push que sustituye a otro cancela el anterior.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Contrato: valida el protocolo con el proveedor mock. Sin credenciales y sin
+  # gastar tokens, así que corre en cada push y en cada PR.
+  # ---------------------------------------------------------------------------
+  contrato:
+    name: Tests de contrato
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+
+      - name: pytest
+        env:
+          LLM_PROVIDER: mock
+          AGENT_API_KEY: test-key
+        run: pytest tests/ -q
+
+  # ---------------------------------------------------------------------------
+  # Evals: pegan a un endpoint desplegado y gastan tokens de verdad, así que
+  # sólo corren en main y sólo después de que el contrato pase.
+  # ---------------------------------------------------------------------------
+  evals:
+    name: Batería de evaluación
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: contrato
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Sin endpoint no hay nada contra qué evaluar. Se omite con un aviso
+      # visible en vez de fallar: un CI que falla por configuración ausente se
+      # acaba ignorando, que es peor que no tenerlo.
+      - name: ¿Hay endpoint configurado?
+        id: config
+        env:
+          EVAL_BASE_URL: ${{ secrets.EVAL_BASE_URL }}
+        run: |
+          if [ -z "$EVAL_BASE_URL" ]; then
+            echo "listo=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Evaluación omitida"
+              echo
+              echo 'Falta el secret `EVAL_BASE_URL`. Defínelo en'
+              echo 'Settings → Secrets and variables → Actions para que la'
+              echo 'batería corra contra el agente desplegado.'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "listo=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Correr la batería
+        if: steps.config.outputs.listo == 'true'
+        env:
+          EVAL_BASE_URL: ${{ secrets.EVAL_BASE_URL }}
+          EVAL_API_KEY: ${{ secrets.EVAL_API_KEY }}
+          JUDGE_API_KEY: ${{ secrets.JUDGE_API_KEY }}
+        run: python evals/run_evals.py --base-url "$EVAL_BASE_URL"
+
+      # always(): el reporte es MÁS útil cuando la batería falló.
+      - name: Publicar el reporte en el resumen
+        if: always() && steps.config.outputs.listo == 'true'
+        run: |
+          if [ -f evals/reports/ultimo.md ]; then
+            cat evals/reports/ultimo.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '### Sin reporte: la corrida murió antes de escribirlo.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Guardar el reporte como artefacto
+        if: always() && steps.config.outputs.listo == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-evals
+          path: evals/reports/ultimo.md
+          if-no-files-found: ignore

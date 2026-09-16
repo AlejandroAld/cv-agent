@@ -68,8 +68,8 @@ Navegador (demo del sitio)        Cualquier cliente Open Responses
 | `app/core.py` | Configuración, logging estructurado, carga y búsqueda del perfil |
 | `app/static/index.html` | Interfaz de chat del sitio personal |
 | `data/perfil.yaml` | **Fuente única de verdad.** Todo hecho que el agente afirma vive aquí |
-| `tests/` | 36 tests de contrato contra el spec y contra el cuerpo que sale al proveedor |
-| `evals/` | Batería de 24 casos, mitad adversariales |
+| `tests/` | 42 tests de contrato contra el spec y contra el cuerpo que sale al proveedor |
+| `evals/` | Batería de 23 casos, 14 de ellos adversariales |
 
 ---
 
@@ -180,10 +180,25 @@ mensajes por hora por IP, configurable, y se puede apagar con `PUBLIC_DEMO=false
 Funcionan los dos modos: reproducción de transcripción, sin estado, y
 `previous_response_id`, con estado del lado del agente.
 
-El estado vive en un `OrderedDict` con TTL y tope de entradas. Es honestamente
-una decisión de alcance: sirve para una instancia, y con varias réplicas una
-continuación puede caer en la instancia equivocada. Está aislado en dos funciones
-precisamente para que cambiarlo por Redis sea un reemplazo local.
+El estado vive en un `OrderedDict` con TTL de dos horas y tope de 500 entradas.
+Es honestamente una decisión de alcance: sirve para una instancia, y con varias
+réplicas una continuación puede caer en la instancia equivocada. Está aislado en
+dos funciones precisamente para que cambiarlo por Redis sea un reemplazo local.
+
+**El flag `store` se respeta.** Por defecto es `true`, como en la plataforma, así
+que sin hacer nada la conversación se encadena. Con `store: false` no se retiene
+nada: ni `GET /v1/responses/{id}` ni un `previous_response_id` apuntando a esa
+respuesta la encuentran después, y el error es el mismo
+`previous_response_not_found` de siempre.
+
+Esto era una mentira pequeña y arreglable: el servidor hacía eco del flag y
+guardaba de todas formas. Un campo que reporta una cosa mientras el servidor hace
+otra es peor que no tener el campo, sobre todo cuando `store: false` es
+justamente lo que manda quien no quiere dejar rastro de una conversación.
+
+Lo que el flag **no** promete es durabilidad. Dos horas y 500 entradas en
+memoria: es un búfer de continuación, no un archivo. Si alguna vez hiciera falta
+retención de verdad, es el mismo reemplazo por Redis de arriba.
 
 ### Guardarraíles
 
@@ -205,9 +220,9 @@ Ninguna capa es confiable sola, y por eso existe la siguiente sección.
 
 ### Evaluación
 
-Un prompt con buenas intenciones no es evidencia. La batería tiene 24 casos y
-**la mitad son adversariales**, porque un agente probado sólo con preguntas
-amables no dice nada sobre su confiabilidad.
+Un prompt con buenas intenciones no es evidencia. La batería tiene 23 casos y
+**14 son adversariales**, porque un agente probado sólo con preguntas amables no
+dice nada sobre su confiabilidad.
 
 | Categoría | Qué ataca | Ejemplos |
 |---|---|---|
@@ -231,7 +246,7 @@ Kubernetes y core bancario, que no tengo, y aprueba sólo si el agente señala
 explícitamente lo que no cubre. Un agente que se vende como encaje perfecto
 reprueba ese test.
 
-Aparte, 36 tests de contrato corren con un proveedor mock, sin credenciales y sin
+Aparte, 42 tests de contrato corren con un proveedor mock, sin credenciales y sin
 gastar tokens, y validan el protocolo: campos requeridos, orden de eventos SSE,
 monotonía de `sequence_number`, `event:` coincidiendo con `type`, terminal
 `[DONE]` y códigos de error.
@@ -244,9 +259,13 @@ monotonía de `sequence_number`, `event:` coincidiendo con `type`, terminal
   planas.
 - **Logging estructurado**: una línea JSON por evento con `response_id`, latencia,
   herramientas invocadas y modelo.
-- **Autenticación** por Bearer con comparación en tiempo constante.
-- **Presupuesto de contexto**: el historial viejo se corta antes que el system
-  prompt, para que los guardarraíles nunca se caigan por longitud.
+- **Autenticación** por Bearer con `hmac.compare_digest` sobre bytes, que no
+  ramifica ni por contenido ni por longitud.
+- **Presupuesto de contexto**: el historial viejo se corta antes que las
+  `instructions`, para que los guardarraíles nunca se caigan por longitud. El
+  recorte nunca deja un `function_call_output` sin su llamada.
+- **CI**: los tests de contrato corren en cada push y cada PR con el proveedor
+  mock; la batería de evaluación sólo en `main`, contra el agente desplegado.
 
 ---
 
@@ -254,16 +273,23 @@ monotonía de `sequence_number`, `event:` coincidiendo con `type`, terminal
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env
+cp .env.example .env     # y edítalo: trae valores de ejemplo, no reales
 
 # sin credenciales: proveedor mock, valida el protocolo
 LLM_PROVIDER=mock AGENT_API_KEY=test-key pytest tests/ -q
 
-# con modelo real
-uvicorn app.main:app --reload --port 8080
+# con modelo real. El --env-file es necesario: la app lee variables de
+# entorno, no el archivo. Quien lo carga es uvicorn.
+uvicorn app.main:app --env-file .env --reload --port 8080
+
+# en otra terminal
+set -a && . ./.env && set +a
 ./scripts/smoke_test.sh http://localhost:8080/v1 "$AGENT_API_KEY"
 python evals/run_evals.py --base-url http://localhost:8080/v1
 ```
+
+Con Dev Containers no hace falta nada de lo anterior: `.devcontainer/` levanta
+Python 3.12 con las dependencias, `az` y el proveedor mock ya configurado.
 
 ## Desplegar
 
