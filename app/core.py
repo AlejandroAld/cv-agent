@@ -29,13 +29,15 @@ ROOT = Path(__file__).resolve().parent.parent
 @dataclass(frozen=True)
 class Settings:
     provider: str = os.getenv("LLM_PROVIDER", "mock").lower()
-    model: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    model: str = os.getenv("LLM_MODEL", "gpt-5-mini")
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
 
     azure_endpoint: str = os.getenv("AZURE_OPENAI_ENDPOINT", "").rstrip("/")
     azure_api_key: str = os.getenv("AZURE_OPENAI_API_KEY", "")
     azure_deployment: str = os.getenv("AZURE_OPENAI_DEPLOYMENT", "")
-    azure_api_version: str = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
+    # La v1 GA no pide api-version. Se deja vacío a propósito; si el recurso
+    # llegara a responder 400 pidiéndola, se define AZURE_OPENAI_API_VERSION=preview.
+    azure_api_version: str = os.getenv("AZURE_OPENAI_API_VERSION", "")
 
     compat_base_url: str = os.getenv("LLM_BASE_URL", "").rstrip("/")
     compat_api_key: str = os.getenv("LLM_API_KEY", "")
@@ -44,6 +46,10 @@ class Settings:
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "http://localhost:8080/v1")
 
     max_tool_iterations: int = int(os.getenv("MAX_TOOL_ITERATIONS", "4"))
+    # Los modelos de razonamiento gastan tokens pensando antes de responder.
+    # "minimal" es lo que este agente necesita: el perfil ya va completo en el
+    # prompt, así que no hay nada que deducir, sólo que citar bien.
+    reasoning_effort: str = os.getenv("REASONING_EFFORT", "minimal")
     request_timeout_s: float = float(os.getenv("REQUEST_TIMEOUT_S", "60"))
     max_input_chars: int = int(os.getenv("MAX_INPUT_CHARS", "24000"))
     profile_path: str = os.getenv("PROFILE_PATH", str(ROOT / "data" / "perfil.yaml"))
@@ -98,6 +104,20 @@ def _fold(text: str) -> str:
     return "".join(c for c in norm if unicodedata.category(c) != "Mn")
 
 
+def _variantes(termino: str) -> tuple[str, ...]:
+    """El término y su singular, para que 'proyectos' encuentre 'proyecto'.
+
+    El match es por subcadena, así que sin esto 'arbitradas' no encuentra
+    'arbitrada' y una vacante en plural da falso negativo. Sólo se recorta a
+    partir de cinco caracteres: 'has' o 'api' recortados generan ruido.
+    """
+    if len(termino) <= 4:
+        return (termino,)
+    if termino.endswith("es"):
+        return (termino, termino[:-1], termino[:-2])
+    return (termino, termino[:-1])
+
+
 @dataclass
 class Profile:
     raw: dict[str, Any] = field(default_factory=dict)
@@ -122,6 +142,21 @@ class Profile:
     @property
     def habilidades(self) -> list[dict[str, Any]]:
         return self.raw.get("habilidades", []) or []
+
+    @property
+    def publicaciones(self) -> list[dict[str, Any]]:
+        """Las publicaciones, con un id derivado para poder citarlas.
+
+        Esta sección del YAML no trae id propio. Se deriva por posición para
+        que `obtener_detalle` pueda resolverla igual que una experiencia o un
+        proyecto: sin id no hay cita verificable, que es para lo que existen
+        las herramientas. Si el YAML llega a traer uno, ese gana.
+        """
+        salida: list[dict[str, Any]] = []
+        for i, pub in enumerate(self.raw.get("publicaciones", []) or [], start=1):
+            if isinstance(pub, dict):
+                salida.append({"id": f"pub-{i}", **pub})
+        return salida
 
     @property
     def faq(self) -> list[dict[str, Any]]:
@@ -215,9 +250,35 @@ class Profile:
                 )
             )
 
-        certs = self.raw.get("certificaciones") or []
-        if certs:
-            partes.append("# Certificaciones\n" + "\n".join(f"- {c}" for c in certs))
+        if self.publicaciones:
+            bloques = []
+            for pub in self.publicaciones:
+                cuerpo = [f"[{pub.get('id')}] {pub.get('titulo','')}"]
+                if pub.get("medio"):
+                    cuerpo.append(f"  Medio: {pub['medio']}")
+                if pub.get("idioma"):
+                    cuerpo.append(f"  Idioma: {pub['idioma']}")
+                # La URL va completa y literal: es lo que hace la cita
+                # verificable, y el agente debe poder darla si se la piden.
+                if pub.get("url"):
+                    cuerpo.append(f"  URL: {pub['url']}")
+                bloques.append("\n".join(cuerpo))
+            partes.append("# Publicaciones\n" + "\n\n".join(bloques))
+
+        # Las certificaciones son dicts {nombre, estado}, pero se acepta un
+        # string suelto: el formato de esta sección ya cambió una vez.
+        lineas_cert = []
+        for c in self.raw.get("certificaciones") or []:
+            if isinstance(c, dict):
+                nombre = str(c.get("nombre") or "").strip()
+                if not nombre:
+                    continue  # sin nombre no hay nada que afirmar
+                estado = str(c.get("estado") or "").strip()
+                lineas_cert.append(f"- {nombre} ({estado})" if estado else f"- {nombre}")
+            elif c:
+                lineas_cert.append(f"- {c}")
+        if lineas_cert:
+            partes.append("# Certificaciones\n" + "\n".join(lineas_cert))
 
         if self.faq:
             partes.append(
@@ -237,31 +298,104 @@ class Profile:
         return "\n\n".join(partes)
 
     # ---- búsqueda determinista (usada por las herramientas) --------------
+    @staticmethod
+    def _puntuar(terminos: list[str], destacado: str, texto: str) -> tuple[float, str]:
+        """Devuelve (score, fuerza de la evidencia).
+
+        La distinción es el punto: un término que pega en lo DESTACADO —título,
+        puesto, nombre de proyecto, stack, keywords— es experiencia declarada.
+        Uno que sólo pega dentro de la prosa del registro es, a lo mucho, un
+        tema que el perfil roza.
+
+        Los dos sumaban al mismo booleano, y por eso un requisito de "core
+        bancario" salía cubierto apoyado en "convención bancaria base 360", que
+        es una convención de conteo de días, no integración con un core
+        bancario. Ese estiramiento se detecta en la primera entrevista.
+        """
+        score = 0.0
+        directa = False
+        for t in terminos:
+            variantes = _variantes(t)
+            if any(v in destacado for v in variantes):
+                score += 3.0
+                directa = True
+            elif any(v in texto for v in variantes):
+                score += 1.0
+        if score <= 0:
+            return 0.0, "sin_evidencia"
+        return score, "directa" if directa else "adyacente"
+
     def buscar(self, consulta: str, limite: int = 5) -> list[dict[str, Any]]:
-        """Scoring léxico simple sobre experiencia + proyectos.
+        """Scoring léxico sobre experiencia + proyectos + publicaciones.
 
         A propósito NO es embeddings: el corpus son decenas de registros, el
         vocabulario es técnico y literal, y un match léxico es explicable,
         instantáneo y no necesita infraestructura extra.
+
+        Cada resultado viaja con su `evidencia`: "directa" o "adyacente". Sin
+        eso, quien consume la búsqueda no puede distinguir un match en el stack
+        de uno dentro de una frase en prosa, y `evaluar_encaje` termina
+        presentando lo segundo como cobertura.
+
+        Las publicaciones se recorren aquí y no en una herramienta aparte
+        porque `evaluar_encaje` se apoya en esta función: si no estuvieran, una
+        vacante que pidiera publicaciones daría sin evidencia contra una
+        publicación arbitrada que sí existe.
+
+        La categoría del registro entra al texto buscable porque es un dato
+        real del perfil, no un sinónimo inventado: sin ella, buscar
+        "publicaciones" no encuentra la publicación, porque esa palabra no
+        aparece dentro del registro.
         """
         terminos = [t for t in _fold(consulta).split() if len(t) > 2]
         if not terminos:
             return []
 
-        candidatos: list[tuple[float, dict[str, Any]]] = []
-        for e in self.experiencia:
-            texto = _fold(json.dumps(e, ensure_ascii=False))
-            score = sum(3.0 if t in _fold(e.get("puesto", "") + " " + " ".join(e.get("stack", []) or [])) else (1.0 if t in texto else 0.0) for t in terminos)
-            if score > 0:
-                candidatos.append((score, {"tipo": "experiencia", **e}))
-        for pr in self.proyectos:
-            texto = _fold(json.dumps(pr, ensure_ascii=False))
-            score = sum(3.0 if t in _fold(pr.get("nombre", "") + " " + " ".join(pr.get("stack", []) or [])) else (1.0 if t in texto else 0.0) for t in terminos)
-            if score > 0:
-                candidatos.append((score, {"tipo": "proyecto", **pr}))
+        candidatos: list[tuple[float, bool, dict[str, Any]]] = []
 
-        candidatos.sort(key=lambda x: x[0], reverse=True)
-        return [c for _, c in candidatos[:limite]]
+        def considerar(registro: dict[str, Any], tipo: str, destacado: str, texto: str) -> None:
+            score, fuerza = self._puntuar(terminos, destacado, texto)
+            if score > 0:
+                # tipo y evidencia se calculan aquí: mandan sobre el registro.
+                candidatos.append(
+                    (score, fuerza == "directa", {**registro, "tipo": tipo, "evidencia": fuerza})
+                )
+
+        for e in self.experiencia:
+            considerar(
+                e,
+                "experiencia",
+                _fold(f"{e.get('puesto', '')} {' '.join(e.get('stack', []) or [])}"),
+                _fold("experiencia " + json.dumps(e, ensure_ascii=False)),
+            )
+
+        for pr in self.proyectos:
+            considerar(
+                pr,
+                "proyecto",
+                _fold(f"{pr.get('nombre', '')} {' '.join(pr.get('stack', []) or [])}"),
+                _fold("proyecto " + json.dumps(pr, ensure_ascii=False)),
+            )
+
+        for pub in self.publicaciones:
+            # Los keywords van a lo destacado, no a la prosa: son etiquetas que
+            # alguien puso a propósito, tan declaradas como un stack. Dejarlos
+            # en prosa marcaría "NLP" como adyacente contra un artículo
+            # arbitrado de NLP, que es el falso negativo al revés.
+            considerar(
+                pub,
+                "publicacion",
+                _fold(
+                    f"{pub.get('titulo', '')} {pub.get('medio', '')} "
+                    + " ".join(pub.get("keywords", []) or [])
+                ),
+                _fold("publicacion " + json.dumps(pub, ensure_ascii=False)),
+            )
+
+        # La evidencia directa gana sobre la adyacente aunque sume menos puntos:
+        # tres menciones de pasada no valen más que un match en el stack.
+        candidatos.sort(key=lambda c: (c[1], c[0]), reverse=True)
+        return [registro for _, _, registro in candidatos[:limite]]
 
 
 @lru_cache(maxsize=1)

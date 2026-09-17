@@ -77,78 +77,96 @@ def construir_system_prompt(profile: Profile | None = None) -> str:
 # ---------------------------------------------------------------------------
 # Herramientas internas (se ejecutan aquí, el cliente nunca las ve ejecutarse)
 # ---------------------------------------------------------------------------
+# Formato plano de la Responses API: name/description/parameters van al nivel
+# superior del objeto, sin el anidado "function" de Chat Completions.
 HERRAMIENTAS_INTERNAS: list[dict[str, Any]] = [
     {
         "type": "function",
-        "function": {
-            "name": "buscar_en_perfil",
-            "description": (
-                "Busca experiencias y proyectos del perfil por tecnología, dominio "
-                "o palabra clave. Úsala cuando pregunten por una tecnología o tema "
-                "específico y quieras citar los registros exactos."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "consulta": {
-                        "type": "string",
-                        "description": "Términos a buscar, p. ej. 'n8n WhatsApp' o 'Firebase RBAC'.",
-                    },
-                    "limite": {"type": "integer", "description": "Máximo de resultados (1-8).", "default": 4},
+        "name": "buscar_en_perfil",
+        "description": (
+            "Busca experiencias, proyectos y publicaciones del perfil por "
+            "tecnología, dominio o palabra clave. Úsala cuando pregunten por una "
+            "tecnología o tema específico y quieras citar los registros exactos. "
+            "Las publicaciones traen su URL: dala tal cual si la piden. "
+            "Cada resultado trae su `evidencia`: 'directa' si el término aparece en el "
+            "puesto, nombre, stack o keywords, 'adyacente' si sólo aparece dentro de una "
+            "frase. Lo adyacente se menciona como tal, no como experiencia."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "consulta": {
+                    "type": "string",
+                    "description": "Términos a buscar, p. ej. 'n8n WhatsApp' o 'Firebase RBAC'.",
                 },
-                "required": ["consulta"],
+                "limite": {"type": "integer", "description": "Máximo de resultados (1-8).", "default": 4},
             },
+            "required": ["consulta"],
         },
     },
     {
         "type": "function",
-        "function": {
-            "name": "obtener_detalle",
-            "description": (
-                "Devuelve el registro completo de una experiencia o proyecto por su id "
-                "(p. ej. 'exp-plan-piso', 'proy-bot-ventas'). Úsala cuando pidan profundidad "
-                "sobre algo concreto."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {"id": {"type": "string", "description": "El id del registro."}},
-                "required": ["id"],
-            },
+        "name": "obtener_detalle",
+        "description": (
+            "Devuelve el registro completo de una experiencia, un proyecto o una "
+            "publicación por su id (p. ej. 'exp-dalton', 'proy-agentes-whatsapp'). "
+            "Úsala cuando pidan profundidad sobre algo concreto."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"id": {"type": "string", "description": "El id del registro."}},
+            "required": ["id"],
         },
     },
     {
         "type": "function",
-        "function": {
-            "name": "evaluar_encaje",
-            "description": (
-                "Compara el perfil contra el texto de una vacante o una lista de requisitos "
-                "y devuelve, por requisito, la evidencia encontrada o la ausencia de ella. "
-                "Úsala cuando peguen una descripción de puesto o pregunten '¿encajas en...?'."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "requisitos": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Cada requisito o tecnología a evaluar, por separado.",
-                    }
-                },
-                "required": ["requisitos"],
+        "name": "evaluar_encaje",
+        "description": (
+            "Compara el perfil contra el texto de una vacante o una lista de requisitos. "
+            "Devuelve, por requisito, una cobertura de tres estados: 'directa' "
+            "(aparece en un puesto, nombre, stack o keyword), 'adyacente' (sólo aparece "
+            "dentro de una frase, el perfil roza el tema sin declararlo) o 'sin_evidencia'. "
+            "Úsala cuando peguen una descripción de puesto o pregunten '¿encajas en...?'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "requisitos": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Cada requisito o tecnología a evaluar, por separado.",
+                }
             },
+            "required": ["requisitos"],
         },
     },
     {
         "type": "function",
-        "function": {
-            "name": "obtener_contacto",
-            "description": "Devuelve los canales de contacto públicos. Úsala si preguntan cómo contactar.",
-            "parameters": {"type": "object", "properties": {}},
-        },
+        "name": "obtener_contacto",
+        "description": "Devuelve los canales de contacto públicos. Úsala si preguntan cómo contactar.",
+        "parameters": {"type": "object", "properties": {}},
     },
 ]
 
-NOMBRES_INTERNOS = {t["function"]["name"] for t in HERRAMIENTAS_INTERNAS}
+NOMBRES_INTERNOS = {t["name"] for t in HERRAMIENTAS_INTERNAS}
+
+
+def _evidencia(hit: dict[str, Any]) -> dict[str, Any]:
+    """Una línea de evidencia para `evaluar_encaje`.
+
+    Una publicación no tiene `nombre` ni `puesto` ni `stack`; sin el `titulo`
+    en la cadena de respaldo saldría como evidencia vacía, que es peor que no
+    devolverla. La URL viaja para que la cita sea verificable.
+    """
+    ev: dict[str, Any] = {
+        "id": hit.get("id"),
+        "nombre": hit.get("nombre") or hit.get("puesto") or hit.get("titulo"),
+        "evidencia": hit.get("evidencia"),
+        "stack": hit.get("stack", []),
+    }
+    if hit.get("url"):
+        ev["url"] = hit["url"]
+    return ev
 
 
 def ejecutar_herramienta(nombre: str, argumentos: dict[str, Any]) -> dict[str, Any]:
@@ -174,10 +192,17 @@ def ejecutar_herramienta(nombre: str, argumentos: dict[str, Any]) -> dict[str, A
         for pr in p.proyectos:
             if pr.get("id") == rid:
                 return {"tipo": "proyecto", **pr}
+        for pub in p.publicaciones:
+            if pub.get("id") == rid:
+                return {"tipo": "publicacion", **pub}
         return {
             "error": "not_found",
             "id_solicitado": rid,
-            "ids_disponibles": [e.get("id") for e in p.experiencia] + [x.get("id") for x in p.proyectos],
+            "ids_disponibles": (
+                [e.get("id") for e in p.experiencia]
+                + [x.get("id") for x in p.proyectos]
+                + [b.get("id") for b in p.publicaciones]
+            ),
         }
 
     if nombre == "evaluar_encaje":
@@ -187,25 +212,40 @@ def ejecutar_herramienta(nombre: str, argumentos: dict[str, Any]) -> dict[str, A
         evaluacion = []
         for req in [str(r) for r in reqs][:15]:
             hits = p.buscar(req, 2)
+            if any(h.get("evidencia") == "directa" for h in hits):
+                cobertura = "directa"
+            elif hits:
+                cobertura = "adyacente"
+            else:
+                cobertura = "sin_evidencia"
             evaluacion.append(
                 {
                     "requisito": req,
-                    "cubierto": bool(hits),
-                    "evidencia": [
-                        {"id": h.get("id"), "nombre": h.get("nombre") or h.get("puesto"), "stack": h.get("stack", [])}
-                        for h in hits
-                    ]
-                    or None,
+                    "cobertura": cobertura,
+                    "evidencia": [_evidencia(h) for h in hits] or None,
                 }
             )
-        cubiertos = sum(1 for e in evaluacion if e["cubierto"])
+        coberturas = [e["cobertura"] for e in evaluacion]
         return {
             "total": len(evaluacion),
-            "cubiertos": cubiertos,
+            # Tres conteos y no uno: un "4 de 5" esconde justo la diferencia
+            # entre lo que se puede afirmar y lo que sólo se roza.
+            "directos": coberturas.count("directa"),
+            "adyacentes": coberturas.count("adyacente"),
+            "sin_evidencia": coberturas.count("sin_evidencia"),
             "evaluacion": evaluacion,
             "instruccion": (
-                "Reporta honestamente lo no cubierto. No presentes un requisito sin "
-                "evidencia como si estuviera cubierto."
+                "Reporta cada requisito con la fuerza de su evidencia, no como un sí o un no. "
+                "'directa': el término aparece en un puesto, nombre de proyecto, stack o "
+                "keyword del perfil. Es experiencia declarada y puedes afirmarla. "
+                "'adyacente': el término sólo aparece dentro de una frase en prosa, así que "
+                "el perfil ROZA el tema pero no lo declara como experiencia. Repórtalo COMO "
+                "adyacente, di explícitamente en qué consiste el parecido y qué falta; nunca "
+                "lo presentes como cubierto. Ejemplo: 'core bancario' con evidencia adyacente "
+                "en 'convención bancaria base 360' es cálculo de intereses con una convención "
+                "de conteo de días, no integración con un core bancario, y presentarlo como "
+                "encaje se detecta en la primera entrevista. "
+                "'sin_evidencia': dilo sin rodeos y ofrece lo más cercano que sí tengas."
             ),
         }
 

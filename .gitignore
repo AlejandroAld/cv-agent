@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Credenciales: nunca en el repo
+.env
+
+# Reportes de evaluación: se regeneran en cada corrida
+evals/reports/

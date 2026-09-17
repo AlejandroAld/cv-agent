@@ -1,11 +1,13 @@
-"""Capa de proveedor de modelo.
+"""Capa de proveedor de modelo: Responses API.
 
-El servidor habla Open Responses hacia afuera y Chat Completions hacia adentro.
-Esa traducción vive aquí, así que cambiar de proveedor es una variable de
-entorno y no tocar el agent loop.
+El servidor habla Open Responses hacia afuera y hacia adentro. La migración
+desde Chat Completions no fue estética: los modelos de razonamiento (serie
+GPT-5) rechazan `temperature`, `top_p` y las penalties, usan
+`max_completion_tokens` en vez de `max_tokens`, y para tool calling requieren
+esta API. Mandarles el cuerpo viejo devuelve 400.
 
-Proveedores: openai | azure | compatible (cualquier base URL OpenAI-compatible)
-| mock (determinista, para tests y CI sin gastar tokens).
+Proveedores: azure | openai | compatible (cualquier base URL que exponga
+/responses) | mock (determinista, para tests y CI sin gastar tokens).
 """
 
 from __future__ import annotations
@@ -25,77 +27,140 @@ class LLMError(RuntimeError):
         self.status = status
 
 
+# ---------------------------------------------------------------------------
+# Resolución de proveedor
+# ---------------------------------------------------------------------------
+def _base_azure(endpoint: str) -> str:
+    """El portal de Foundry entrega el endpoint ya con /openai/v1.
+
+    Se acepta con o sin el sufijo para que configurar la variable no dependa de
+    dónde se haya copiado la URL.
+    """
+    base = endpoint.rstrip("/")
+    return base if base.endswith("/openai/v1") else f"{base}/openai/v1"
+
+
 def _endpoint_y_headers() -> tuple[str, dict[str, str], str]:
+    """Devuelve (url de /responses, headers de auth, modelo a pedir)."""
     s = get_settings()
+
     if s.provider == "azure":
         if not (s.azure_endpoint and s.azure_deployment):
             raise LLMError("Azure OpenAI mal configurado: falta endpoint o deployment.", 500)
-        url = (
-            f"{s.azure_endpoint}/openai/deployments/{s.azure_deployment}"
-            f"/chat/completions?api-version={s.azure_api_version}"
-        )
+        url = f"{_base_azure(s.azure_endpoint)}/responses"
+        # La v1 GA no pide api-version; sólo se agrega si alguien la define.
+        if s.azure_api_version:
+            url += f"?api-version={s.azure_api_version}"
+        # Azure autentica con el header api-key, no con Bearer.
         return url, {"api-key": s.azure_api_key}, s.azure_deployment
+
     if s.provider == "compatible":
         if not s.compat_base_url:
             raise LLMError("LLM_BASE_URL no configurado.", 500)
-        return f"{s.compat_base_url}/chat/completions", {"Authorization": f"Bearer {s.compat_api_key}"}, s.model
-    # openai por defecto
+        return (
+            f"{s.compat_base_url}/responses",
+            {"Authorization": f"Bearer {s.compat_api_key}"},
+            s.model,
+        )
+
     if not s.openai_api_key:
         raise LLMError("OPENAI_API_KEY no configurado.", 500)
-    return "https://api.openai.com/v1/chat/completions", {"Authorization": f"Bearer {s.openai_api_key}"}, s.model
+    return (
+        "https://api.openai.com/v1/responses",
+        {"Authorization": f"Bearer {s.openai_api_key}"},
+        s.model,
+    )
 
 
-def _payload(
-    messages: list[dict[str, Any]],
+def construir_cuerpo(
+    entrada: list[dict[str, Any]],
+    instructions: str | None,
     tools: list[dict[str, Any]] | None,
-    temperature: float | None,
-    max_tokens: int | None,
+    max_output_tokens: int | None,
+    reasoning_effort: str | None,
     model: str,
-    stream: bool,
 ) -> dict[str, Any]:
-    body: dict[str, Any] = {"model": model, "messages": messages, "stream": stream}
+    """Cuerpo de POST /responses.
+
+    NUNCA incluye temperature, top_p, presence_penalty, frequency_penalty ni
+    max_tokens: un modelo de razonamiento responde 400 ante cualquiera de
+    ellos. Si el cliente los manda, se hacen eco en el objeto Response pero no
+    viajan al proveedor.
+    """
+    cuerpo: dict[str, Any] = {
+        "model": model,
+        "input": entrada,
+        "stream": True,
+        # El estado de conversación lo lleva este servidor, no el proveedor.
+        "store": False,
+    }
+    if instructions:
+        cuerpo["instructions"] = instructions
     if tools:
-        body["tools"] = tools
-        body["tool_choice"] = "auto"
-    if temperature is not None:
-        body["temperature"] = temperature
-    if max_tokens:
-        body["max_tokens"] = max_tokens
-    if stream:
-        body["stream_options"] = {"include_usage": True}
-    return body
+        cuerpo["tools"] = tools
+        cuerpo["tool_choice"] = "auto"
+    if max_output_tokens:
+        cuerpo["max_output_tokens"] = max_output_tokens
+    if reasoning_effort:
+        cuerpo["reasoning"] = {"effort": reasoning_effort}
+    return cuerpo
 
 
-async def stream_chat(
-    messages: list[dict[str, Any]],
+def _normalizar_usage(u: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Deja el usage listo para `construir_response`, que lee ambos dialectos."""
+    if not u:
+        return None
+    salida = dict(u)
+    if u.get("input_tokens_details") and "prompt_tokens_details" not in salida:
+        salida["prompt_tokens_details"] = u["input_tokens_details"]
+    if u.get("output_tokens_details") and "completion_tokens_details" not in salida:
+        salida["completion_tokens_details"] = u["output_tokens_details"]
+    return salida
+
+
+# ---------------------------------------------------------------------------
+# Streaming
+# ---------------------------------------------------------------------------
+async def stream_agente(
+    entrada: list[dict[str, Any]],
     *,
+    instructions: str | None = None,
     tools: list[dict[str, Any]] | None = None,
-    temperature: float | None = None,
-    max_tokens: int | None = None,
+    max_output_tokens: int | None = None,
+    reasoning_effort: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Emite eventos normalizados del proveedor.
 
     Tipos emitidos:
       {"t": "text", "delta": str}
-      {"t": "tool", "index": int, "id": str|None, "name": str|None, "args_delta": str}
-      {"t": "done", "finish_reason": str|None, "usage": dict|None}
+      {"t": "tool", "call_id": str, "name": str, "arguments": str}
+      {"t": "done", "usage": dict|None, "output": list}
+
+    Los argumentos de una llamada llegan completos en `response.output_item.done`,
+    así que no hay ensamblado por índice: cuando se emite un evento "tool", el
+    JSON de argumentos ya está entero.
+
+    `output` son los items crudos del modelo —incluidos los de razonamiento—,
+    que el bucle vuelve a mandar tal cual en la siguiente vuelta.
     """
     s = get_settings()
 
     if s.provider == "mock":
-        async for ev in _mock_stream(messages, tools):
+        async for ev in _mock_stream(entrada, tools):
             yield ev
         return
 
     url, headers, model = _endpoint_y_headers()
     headers["Content-Type"] = "application/json"
-    body = _payload(messages, tools, temperature, max_tokens, model, stream=True)
+    cuerpo = construir_cuerpo(
+        entrada, instructions, tools, max_output_tokens, reasoning_effort, model
+    )
 
     usage: dict[str, Any] | None = None
-    finish_reason: str | None = None
+    items: list[dict[str, Any]] = []
 
     async with httpx.AsyncClient(timeout=s.request_timeout_s) as client:
-        async with client.stream("POST", url, headers=headers, json=body) as resp:
+        async with client.stream("POST", url, headers=headers, json=cuerpo) as resp:
             if resp.status_code >= 400:
                 detalle = (await resp.aread()).decode("utf-8", "replace")[:400]
                 log_event("llm_error", status=resp.status_code, detalle=detalle)
@@ -108,47 +173,63 @@ async def stream_chat(
                 if data == "[DONE]":
                     break
                 try:
-                    chunk = json.loads(data)
+                    ev = json.loads(data)
                 except json.JSONDecodeError:
                     continue
 
-                if chunk.get("usage"):
-                    usage = chunk["usage"]
-                choices = chunk.get("choices") or []
-                if not choices:
-                    continue
-                choice = choices[0]
-                if choice.get("finish_reason"):
-                    finish_reason = choice["finish_reason"]
-                delta = choice.get("delta") or {}
+                tipo = ev.get("type")
 
-                if delta.get("content"):
-                    yield {"t": "text", "delta": delta["content"]}
+                if tipo == "response.output_text.delta":
+                    if ev.get("delta"):
+                        yield {"t": "text", "delta": ev["delta"]}
 
-                for tc in delta.get("tool_calls") or []:
-                    yield {
-                        "t": "tool",
-                        "index": tc.get("index", 0),
-                        "id": tc.get("id"),
-                        "name": (tc.get("function") or {}).get("name"),
-                        "args_delta": (tc.get("function") or {}).get("arguments") or "",
-                    }
+                elif tipo == "response.output_item.done":
+                    item = ev.get("item") or {}
+                    items.append(item)
+                    if item.get("type") == "function_call":
+                        yield {
+                            "t": "tool",
+                            "call_id": item.get("call_id") or item.get("id") or "",
+                            "name": item.get("name") or "",
+                            "arguments": item.get("arguments") or "{}",
+                        }
 
-    yield {"t": "done", "finish_reason": finish_reason, "usage": usage}
+                elif tipo in ("response.completed", "response.incomplete"):
+                    respuesta = ev.get("response") or {}
+                    usage = respuesta.get("usage") or usage
+                    # El objeto final manda sobre lo acumulado item por item.
+                    if respuesta.get("output"):
+                        items = respuesta["output"]
+
+                elif tipo in ("response.failed", "error"):
+                    respuesta = ev.get("response") or {}
+                    detalle = (respuesta.get("error") or {}).get("message") or ev.get("message") or ""
+                    log_event("llm_error", tipo=tipo, detalle=str(detalle)[:400])
+                    raise LLMError("El proveedor de modelo no completó la respuesta.", 502)
+
+    yield {"t": "done", "usage": _normalizar_usage(usage), "output": items}
 
 
 # ---------------------------------------------------------------------------
 # Mock determinista: permite correr tests de contrato y CI sin credenciales.
 # ---------------------------------------------------------------------------
+def _ultimo_texto_usuario(entrada: list[dict[str, Any]]) -> str:
+    for item in reversed(entrada):
+        if item.get("type") == "message" and item.get("role") == "user":
+            return "".join(
+                p.get("text", "") for p in item.get("content") or [] if isinstance(p, dict)
+            )
+    return ""
+
+
 async def _mock_stream(
-    messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None
+    entrada: list[dict[str, Any]], tools: list[dict[str, Any]] | None
 ) -> AsyncIterator[dict[str, Any]]:
-    ultimo = ""
-    for m in reversed(messages):
-        if m.get("role") == "user":
-            ultimo = str(m.get("content") or "")
-            break
-    ya_hubo_tool = any(m.get("role") == "tool" for m in messages)
+    """Imita la forma real: siempre hay un item de razonamiento en el output."""
+    ultimo = _ultimo_texto_usuario(entrada)
+    ya_hubo_tool = any(i.get("type") == "function_call_output" for i in entrada)
+
+    razonamiento = {"type": "reasoning", "id": "rs_mock_1", "summary": []}
 
     quiere_tool = (
         tools
@@ -156,12 +237,37 @@ async def _mock_stream(
         and any(k in ultimo.lower() for k in ("proyecto", "vacante", "encaj", "contacto"))
     )
     if quiere_tool:
-        yield {"t": "tool", "index": 0, "id": "call_mock_1", "name": "buscar_en_perfil", "args_delta": ""}
-        yield {"t": "tool", "index": 0, "id": None, "name": None, "args_delta": json.dumps({"consulta": ultimo[:60]})}
-        yield {"t": "done", "finish_reason": "tool_calls", "usage": None}
+        llamada = {
+            "type": "function_call",
+            "id": "fc_mock_1",
+            "call_id": "call_mock_1",
+            "name": "buscar_en_perfil",
+            "arguments": json.dumps({"consulta": ultimo[:60]}),
+            "status": "completed",
+        }
+        yield {
+            "t": "tool",
+            "call_id": llamada["call_id"],
+            "name": llamada["name"],
+            "arguments": llamada["arguments"],
+        }
+        yield {"t": "done", "usage": None, "output": [razonamiento, llamada]}
         return
 
     texto = f"[mock] Recibí: {ultimo[:120]}" if ultimo else "[mock] Sin entrada."
     for pedazo in texto.split(" "):
         yield {"t": "text", "delta": pedazo + " "}
-    yield {"t": "done", "finish_reason": "stop", "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}
+    yield {
+        "t": "done",
+        "usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+        "output": [
+            razonamiento,
+            {
+                "type": "message",
+                "id": "msg_mock_1",
+                "status": "completed",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": texto + " ", "annotations": []}],
+            },
+        ],
+    }

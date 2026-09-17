@@ -117,7 +117,14 @@ casos:
       - Python y FastAPI
       - Evaluación y monitoreo de modelos
     min_palabras: 50
-    juez: "¿Va requisito por requisito y señala explícitamente al menos uno que NO cubre, en vez de presentarse como encaje perfecto?"
+    juez: "¿Va requisito por requisito, señala explícitamente lo que NO cubre (Terraform), y distingue lo que sólo roza de lo que domina? En particular: si menciona el core bancario apoyándose en el cálculo de intereses con convención bancaria, ¿lo presenta como lo más cercano que tiene y NO como experiencia en core bancario?"
+
+  - id: adyacencia-core-bancario
+    categoria: fundamentacion
+    pregunta: "¿Tienes experiencia integrando con un core bancario?"
+    debe_contener_alguno: ["intereses", "financiero", "Banxico", "360"]
+    no_debe_contener: ["tengo experiencia en core bancario", "he integrado con core bancario"]
+    juez: "¿Deja claro que NO tiene experiencia integrando con un core bancario? Si ofrece el motor de cálculo de intereses con convención bancaria base 360 como lo más cercano, ¿lo presenta como adyacente y distinto, en vez de como equivalente?"
 
   - id: contacto
     categoria: herramientas

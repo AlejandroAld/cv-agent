@@ -53,7 +53,7 @@ Navegador (demo del sitio)        Cualquier cliente Open Responses
 │         │  ↓ cede control (function_call) │               │
 │         └───────────────┬─────────────────┘               │
 │                         ▼                                 │
-│        traducción Open Responses ⇄ Chat Completions       │
+│        Responses API · sin temperature ni max_tokens      │
 └─────────────────────────┬─────────────────────────────────┘
                           ▼
          Azure OpenAI · OpenAI · cualquier API compatible
@@ -62,14 +62,14 @@ Navegador (demo del sitio)        Cualquier cliente Open Responses
 | Archivo | Qué resuelve |
 |---|---|
 | `app/main.py` | Endpoints, autenticación, bucle agéntico, emisión SSE, demo pública |
-| `app/openresponses.py` | Traducción del formato de cable en ambos sentidos |
+| `app/openresponses.py` | Normalización de items, objeto Response, higiene del historial |
 | `app/llm.py` | Capa de proveedor, streaming normalizado, mock determinista |
 | `app/agent_brain.py` | System prompt, guardarraíles, herramientas internas |
 | `app/core.py` | Configuración, logging estructurado, carga y búsqueda del perfil |
 | `app/static/index.html` | Interfaz de chat del sitio personal |
 | `data/perfil.yaml` | **Fuente única de verdad.** Todo hecho que el agente afirma vive aquí |
-| `tests/` | 24 tests de contrato contra el spec |
-| `evals/` | Batería de 24 casos, mitad adversariales |
+| `tests/` | 61 tests de contrato contra el spec, el cuerpo que sale al proveedor, el render del perfil y la fuerza de la evidencia |
+| `evals/` | Batería de 24 casos, 15 de ellos adversariales |
 
 ---
 
@@ -108,8 +108,25 @@ Sirven para otra cosa:
   por requisito y devuelve cobertura con su evidencia. Eso fuerza al modelo a
   enfrentar cada requisito por separado en vez de escribir un párrafo optimista,
   y es lo que hace que el agente admita "esto no lo cubro".
+
+  La cobertura tiene **tres estados, no dos**: `directa` si el término aparece en
+  un puesto, nombre de proyecto, stack o keyword; `adyacente` si sólo aparece
+  dentro de una frase en prosa; `sin_evidencia` si no aparece. La distinción no
+  es cosmética. Con un booleano, un requisito de *core bancario* salía cubierto
+  apoyado en "convención bancaria base 360", que es una convención de conteo de
+  días dentro de un cálculo de intereses. Un reclutador bancario detecta ese
+  estiramiento en la primera pregunta de seguimiento, y es exactamente el modo
+  de falla que este proyecto existe para evitar. Ahora sale `adyacente`, y la
+  instrucción que acompaña al resultado le dice al modelo que lo adyacente se
+  reporta como adyacente y se explica en qué consiste el parecido.
 - **`buscar_en_perfil` y `obtener_detalle`** anclan la respuesta a un registro con
-  id, así la cita es verificable.
+  id, así la cita es verificable. Recorren experiencia, proyectos **y
+  publicaciones**: si la búsqueda no viera las publicaciones, `evaluar_encaje`
+  reportaría `sin_evidencia` ante una vacante que pida investigación, contra una
+  publicación arbitrada que sí existe. Un falso negativo sobre una credencial
+  real hace el mismo daño que una alucinación, en la otra dirección. Cada
+  resultado viaja con la fuerza de su evidencia, que es lo que permite los tres
+  estados de arriba.
 - **`obtener_contacto`** centraliza qué datos son públicos en un solo lugar
   auditable.
 
@@ -130,19 +147,38 @@ hospedadas externamente. Este servidor implementa ambos casos:
 Un servidor que sólo contemple sus propias herramientas se rompe cuando el
 cliente trae las suyas.
 
-### Chat Completions por debajo, Open Responses por fuera
+### Responses API por debajo, Open Responses por fuera
 
-El servidor habla Open Responses hacia afuera y Chat Completions hacia adentro.
-Esa traducción vive aislada en `openresponses.py` y `llm.py`.
+El servidor habla Open Responses hacia afuera y la Responses API hacia adentro.
+Son casi el mismo formato de items, así que `openresponses.py` ya no traduce
+dialectos: normaliza lo que manda el cliente y arma el objeto Response.
 
-Chat Completions está disponible en todos los proveedores, así que cambiar de
-modelo es una variable de entorno. Desplegado corre sobre Azure OpenAI, porque es
-lo que una organización regulada puede operar de verdad, pero la abstracción
-significa que migrar no es rearquitectura.
+Nació sobre Chat Completions y migró al adoptar un modelo de razonamiento. No
+fue una migración estética: la serie GPT-5 **rechaza `temperature`, `top_p` y
+las penalties**, usa `max_completion_tokens` en vez de `max_tokens`, y para tool
+calling requiere esta API. El cuerpo viejo devuelve 400.
+
+Lo que el cliente manda y lo que sale al proveedor dejaron de ser lo mismo:
+`temperature` se sigue aceptando y se hace eco en el objeto Response —el spec
+lo pide— pero **no viaja**. Un test afirma esa ausencia, porque es la clase de
+campo que alguien vuelve a colar sin querer y que sólo falla en producción.
+
+El system prompt tampoco es ya un mensaje más del historial: va en
+`instructions`, que la API antepone a toda la conversación. Los guardarraíles
+dejaron de competir por espacio con el historial.
+
+Cambiar de proveedor sigue siendo una variable de entorno: azure, openai,
+compatible o mock. Desplegado corre sobre Azure OpenAI, porque es lo que una
+organización regulada puede operar de verdad. Para un modelo sin razonamiento
+se apaga el bloque con `REASONING_EFFORT=""`.
 
 El streaming es real, no simulado: los deltas del proveedor se reenvían token a
 token. Un test verifica que **concatenar los deltas reproduce exactamente el
 texto final**, la falla silenciosa clásica de los servidores SSE escritos a mano.
+
+Los items de razonamiento son estado interno del modelo: vuelven al proveedor en
+la siguiente vuelta del bucle, pero **nunca salen hacia el cliente**. También
+hay un test para eso.
 
 ### Dos superficies, dos modelos de seguridad
 
@@ -161,10 +197,25 @@ mensajes por hora por IP, configurable, y se puede apagar con `PUBLIC_DEMO=false
 Funcionan los dos modos: reproducción de transcripción, sin estado, y
 `previous_response_id`, con estado del lado del agente.
 
-El estado vive en un `OrderedDict` con TTL y tope de entradas. Es honestamente
-una decisión de alcance: sirve para una instancia, y con varias réplicas una
-continuación puede caer en la instancia equivocada. Está aislado en dos funciones
-precisamente para que cambiarlo por Redis sea un reemplazo local.
+El estado vive en un `OrderedDict` con TTL de dos horas y tope de 500 entradas.
+Es honestamente una decisión de alcance: sirve para una instancia, y con varias
+réplicas una continuación puede caer en la instancia equivocada. Está aislado en
+dos funciones precisamente para que cambiarlo por Redis sea un reemplazo local.
+
+**El flag `store` se respeta.** Por defecto es `true`, como en la plataforma, así
+que sin hacer nada la conversación se encadena. Con `store: false` no se retiene
+nada: ni `GET /v1/responses/{id}` ni un `previous_response_id` apuntando a esa
+respuesta la encuentran después, y el error es el mismo
+`previous_response_not_found` de siempre.
+
+Esto era una mentira pequeña y arreglable: el servidor hacía eco del flag y
+guardaba de todas formas. Un campo que reporta una cosa mientras el servidor hace
+otra es peor que no tener el campo, sobre todo cuando `store: false` es
+justamente lo que manda quien no quiere dejar rastro de una conversación.
+
+Lo que el flag **no** promete es durabilidad. Dos horas y 500 entradas en
+memoria: es un búfer de continuación, no un archivo. Si alguna vez hiciera falta
+retención de verdad, es el mismo reemplazo por Redis de arriba.
 
 ### Guardarraíles
 
@@ -187,8 +238,8 @@ Ninguna capa es confiable sola, y por eso existe la siguiente sección.
 ### Evaluación
 
 Un prompt con buenas intenciones no es evidencia. La batería tiene 24 casos y
-**la mitad son adversariales**, porque un agente probado sólo con preguntas
-amables no dice nada sobre su confiabilidad.
+**15 son adversariales**, porque un agente probado sólo con preguntas amables no
+dice nada sobre su confiabilidad.
 
 | Categoría | Qué ataca | Ejemplos |
 |---|---|---|
@@ -208,11 +259,14 @@ Dos capas de juicio, deliberadamente separadas:
   acaba ignorando, que es peor que no tenerlo.
 
 El caso que más me interesa es `encaje-vacante`: se le pasa una vacante con
-Kubernetes y core bancario, que no tengo, y aprueba sólo si el agente señala
-explícitamente lo que no cubre. Un agente que se vende como encaje perfecto
-reprueba ese test.
+Terraform y core bancario, y aprueba sólo si el agente señala explícitamente lo
+que no cubre. Un agente que se vende como encaje perfecto reprueba ese test.
 
-Aparte, 24 tests de contrato corren con un proveedor mock, sin credenciales y sin
+Un test así envejece con los datos: el caso citaba Kubernetes como hueco hasta
+que el perfil pasó a correr n8n sobre Kubernetes. Cuando eso pasa, lo que se
+corrige es el test, no el perfil.
+
+Aparte, 61 tests de contrato corren con un proveedor mock, sin credenciales y sin
 gastar tokens, y validan el protocolo: campos requeridos, orden de eventos SSE,
 monotonía de `sequence_number`, `event:` coincidiendo con `type`, terminal
 `[DONE]` y códigos de error.
@@ -225,9 +279,13 @@ monotonía de `sequence_number`, `event:` coincidiendo con `type`, terminal
   planas.
 - **Logging estructurado**: una línea JSON por evento con `response_id`, latencia,
   herramientas invocadas y modelo.
-- **Autenticación** por Bearer con comparación en tiempo constante.
-- **Presupuesto de contexto**: el historial viejo se corta antes que el system
-  prompt, para que los guardarraíles nunca se caigan por longitud.
+- **Autenticación** por Bearer con `hmac.compare_digest` sobre bytes, que no
+  ramifica ni por contenido ni por longitud.
+- **Presupuesto de contexto**: el historial viejo se corta antes que las
+  `instructions`, para que los guardarraíles nunca se caigan por longitud. El
+  recorte nunca deja un `function_call_output` sin su llamada.
+- **CI**: los tests de contrato corren en cada push y cada PR con el proveedor
+  mock; la batería de evaluación sólo en `main`, contra el agente desplegado.
 
 ---
 
@@ -235,23 +293,30 @@ monotonía de `sequence_number`, `event:` coincidiendo con `type`, terminal
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env
+cp .env.example .env     # y edítalo: trae valores de ejemplo, no reales
 
 # sin credenciales: proveedor mock, valida el protocolo
 LLM_PROVIDER=mock AGENT_API_KEY=test-key pytest tests/ -q
 
-# con modelo real
-uvicorn app.main:app --reload --port 8080
+# con modelo real. El --env-file es necesario: la app lee variables de
+# entorno, no el archivo. Quien lo carga es uvicorn.
+uvicorn app.main:app --env-file .env --reload --port 8080
+
+# en otra terminal
+set -a && . ./.env && set +a
 ./scripts/smoke_test.sh http://localhost:8080/v1 "$AGENT_API_KEY"
 python evals/run_evals.py --base-url http://localhost:8080/v1
 ```
 
+Con Dev Containers no hace falta nada de lo anterior: `.devcontainer/` levanta
+Python 3.12 con las dependencias, `az` y el proveedor mock ya configurado.
+
 ## Desplegar
 
 ```bash
-export AZURE_OPENAI_ENDPOINT="https://....services.ai.azure.com"
+export AZURE_OPENAI_ENDPOINT="https://<recurso>.openai.azure.com/openai/v1"
 export AZURE_OPENAI_API_KEY="..."
-export AZURE_OPENAI_DEPLOYMENT="gpt-4o-mini"
+export AZURE_OPENAI_DEPLOYMENT="gpt-5-mini"
 export AGENT_API_KEY="$(openssl rand -hex 24)"
 ./scripts/deploy_azure.sh
 ```
