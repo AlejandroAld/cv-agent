@@ -273,6 +273,10 @@ publicaciones:
     medio: "Computación y Sistemas, revista arbitrada, Vol. 29 No. 3, 2025"
     url: "https://www.cys.cic.ipn.mx/ojs/index.php/CyS/article/view/5887"
     idioma: "Inglés"
+    # Términos por los que alguien buscaría este trabajo pero que no aparecen
+    # literalmente en el título ni en el medio. Son datos, no sinónimos
+    # inventados por el código.
+    keywords: ["NLP", "procesamiento de lenguaje natural", "deep learning", "Transformers", "BERT", "clasificación de texto", "salud mental", "investigación aplicada", "artículo científico", "paper", "publicación arbitrada", "peer reviewed"]
 
 certificaciones:
   - nombre: "Microsoft AI-103, Azure AI Apps and Agents Developer Associate"
