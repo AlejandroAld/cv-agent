@@ -277,9 +277,9 @@ def test_herramientas_internas_no_alucinan():
     assert hit["encontrados"] > 0
 
     encaje = ejecutar_herramienta("evaluar_encaje", {"requisitos": ["Terraform", "Firebase"]})
-    por_req = {e["requisito"]: e["cubierto"] for e in encaje["evaluacion"]}
-    assert por_req["Terraform"] is False, "debe reportar honestamente lo que no cubre"
-    assert por_req["Firebase"] is True
+    por_req = {e["requisito"]: e["cobertura"] for e in encaje["evaluacion"]}
+    assert por_req["Terraform"] == "sin_evidencia", "debe reportar honestamente lo que no cubre"
+    assert por_req["Firebase"] == "directa"
 
     assert ejecutar_herramienta("obtener_detalle", {"id": "nope"})["error"] == "not_found"
 
@@ -751,12 +751,12 @@ def test_obtener_detalle_resuelve_una_publicacion():
 
 def test_evaluar_encaje_acredita_la_publicacion_con_su_url():
     """El falso negativo que motivó meterlas en buscar(): una vacante que pide
-    publicaciones no puede decir `cubierto: false` contra una real."""
+    publicaciones no puede decir `sin_evidencia` contra una real."""
     from app.agent_brain import ejecutar_herramienta
 
     encaje = ejecutar_herramienta("evaluar_encaje", {"requisitos": ["Publicaciones arbitradas"]})
     req = encaje["evaluacion"][0]
-    assert req["cubierto"] is True
+    assert req["cobertura"] == "directa"
     urls = [e.get("url") for e in req["evidencia"] or []]
     assert any(u and "cys.cic.ipn.mx" in u for u in urls), "la evidencia debe traer la URL"
 
@@ -783,3 +783,95 @@ def test_publicaciones_derivan_id_estable():
 
     p = Profile(raw={"publicaciones": [{"titulo": "A"}, {"titulo": "B", "id": "propio"}]})
     assert [x["id"] for x in p.publicaciones] == ["pub-1", "propio"], "el id del YAML gana"
+
+
+# --- fuerza de la evidencia ------------------------------------------------
+# El booleano viejo trataba igual un match en el stack y uno dentro de una
+# frase en prosa. Por eso "core bancario" salía cubierto apoyado en
+# "convención bancaria base 360", que es una convención de conteo de días.
+def _cobertura(requisito: str) -> str:
+    from app.agent_brain import ejecutar_herramienta
+
+    encaje = ejecutar_herramienta("evaluar_encaje", {"requisitos": [requisito]})
+    return encaje["evaluacion"][0]["cobertura"]
+
+
+def test_core_bancario_es_adyacente_no_directo():
+    """El caso que destapó el problema. Si esto vuelve a 'directa', el agente
+    está diciéndole a un reclutador bancario que cubre core bancario."""
+    assert _cobertura("core bancario") == "adyacente"
+
+
+def test_lo_que_esta_en_el_stack_es_evidencia_directa():
+    for requisito in ("Kubernetes", "LangGraph", "Next.js"):
+        assert _cobertura(requisito) == "directa", f"{requisito} está en el stack"
+
+
+def test_lo_ausente_no_tiene_evidencia():
+    for requisito in ("Terraform", "Rust"):
+        assert _cobertura(requisito) == "sin_evidencia"
+
+
+def test_publicaciones_arbitradas_sigue_trayendo_pub1_con_url():
+    from app.agent_brain import ejecutar_herramienta
+
+    req = ejecutar_herramienta(
+        "evaluar_encaje", {"requisitos": ["Publicaciones arbitradas"]}
+    )["evaluacion"][0]
+    assert req["cobertura"] == "directa"
+    pub = next(e for e in req["evidencia"] if e["id"] == "pub-1")
+    assert "cys.cic.ipn.mx" in pub["url"]
+
+
+def test_los_keywords_de_la_publicacion_son_evidencia_directa():
+    """Un keyword es una etiqueta puesta a propósito, tan declarada como un
+    stack. Si cayera a 'adyacente', el agente diría que su experiencia en NLP
+    es tangencial teniendo un artículo arbitrado de NLP."""
+    from app.core import get_profile
+
+    for consulta in ("NLP", "artículo científico", "paper", "BERT"):
+        hits = get_profile().buscar(consulta, 5)
+        pub = next((h for h in hits if h["id"] == "pub-1"), None)
+        assert pub is not None, f"{consulta!r} no recuperó la publicación"
+        assert pub["evidencia"] == "directa", f"{consulta!r} quedó como adyacente"
+
+
+def test_buscar_marca_la_fuerza_en_cada_resultado():
+    from app.core import get_profile
+
+    for h in get_profile().buscar("core bancario", 5):
+        assert h["evidencia"] == "adyacente"
+    for h in get_profile().buscar("Kubernetes", 5):
+        assert h["evidencia"] in ("directa", "adyacente")
+    assert any(h["evidencia"] == "directa" for h in get_profile().buscar("Kubernetes", 5))
+
+
+def test_la_directa_se_ordena_antes_que_la_adyacente():
+    """Tres menciones de pasada no valen más que un match en el stack."""
+    from app.core import get_profile
+
+    hits = get_profile().buscar("NLP", 6)
+    fuerzas = [h["evidencia"] for h in hits]
+    assert fuerzas == sorted(fuerzas, key=lambda f: f != "directa")
+
+
+def test_la_instruccion_explica_la_adyacencia():
+    """La instrucción es el guardarraíl: si se diluye, el modelo vuelve a
+    presentar lo adyacente como cobertura."""
+    from app.agent_brain import ejecutar_herramienta
+
+    ins = ejecutar_herramienta("evaluar_encaje", {"requisitos": ["x"]})["instruccion"]
+    assert "adyacente" in ins
+    assert "nunca" in ins.lower()
+    assert "core bancario" in ins, "el ejemplo concreto es lo que lo hace interpretable"
+
+
+def test_el_resumen_desglosa_los_tres_estados():
+    from app.agent_brain import ejecutar_herramienta
+
+    r = ejecutar_herramienta(
+        "evaluar_encaje", {"requisitos": ["Kubernetes", "core bancario", "Terraform"]}
+    )
+    assert (r["directos"], r["adyacentes"], r["sin_evidencia"]) == (1, 1, 1)
+    assert r["total"] == 3
+    assert "cubiertos" not in r, "el conteo único escondía justo la distinción"

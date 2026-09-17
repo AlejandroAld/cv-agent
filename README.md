@@ -68,8 +68,8 @@ Navegador (demo del sitio)        Cualquier cliente Open Responses
 | `app/core.py` | Configuración, logging estructurado, carga y búsqueda del perfil |
 | `app/static/index.html` | Interfaz de chat del sitio personal |
 | `data/perfil.yaml` | **Fuente única de verdad.** Todo hecho que el agente afirma vive aquí |
-| `tests/` | 52 tests de contrato contra el spec, el cuerpo que sale al proveedor y el render del perfil |
-| `evals/` | Batería de 23 casos, 14 de ellos adversariales |
+| `tests/` | 61 tests de contrato contra el spec, el cuerpo que sale al proveedor, el render del perfil y la fuerza de la evidencia |
+| `evals/` | Batería de 24 casos, 15 de ellos adversariales |
 
 ---
 
@@ -108,13 +108,25 @@ Sirven para otra cosa:
   por requisito y devuelve cobertura con su evidencia. Eso fuerza al modelo a
   enfrentar cada requisito por separado en vez de escribir un párrafo optimista,
   y es lo que hace que el agente admita "esto no lo cubro".
+
+  La cobertura tiene **tres estados, no dos**: `directa` si el término aparece en
+  un puesto, nombre de proyecto, stack o keyword; `adyacente` si sólo aparece
+  dentro de una frase en prosa; `sin_evidencia` si no aparece. La distinción no
+  es cosmética. Con un booleano, un requisito de *core bancario* salía cubierto
+  apoyado en "convención bancaria base 360", que es una convención de conteo de
+  días dentro de un cálculo de intereses. Un reclutador bancario detecta ese
+  estiramiento en la primera pregunta de seguimiento, y es exactamente el modo
+  de falla que este proyecto existe para evitar. Ahora sale `adyacente`, y la
+  instrucción que acompaña al resultado le dice al modelo que lo adyacente se
+  reporta como adyacente y se explica en qué consiste el parecido.
 - **`buscar_en_perfil` y `obtener_detalle`** anclan la respuesta a un registro con
   id, así la cita es verificable. Recorren experiencia, proyectos **y
   publicaciones**: si la búsqueda no viera las publicaciones, `evaluar_encaje`
-  reportaría `cubierto: false` ante una vacante que pida investigación, contra
-  una publicación arbitrada que sí existe. Un falso negativo sobre una
-  credencial real hace el mismo daño que una alucinación, en la otra
-  dirección.
+  reportaría `sin_evidencia` ante una vacante que pida investigación, contra una
+  publicación arbitrada que sí existe. Un falso negativo sobre una credencial
+  real hace el mismo daño que una alucinación, en la otra dirección. Cada
+  resultado viaja con la fuerza de su evidencia, que es lo que permite los tres
+  estados de arriba.
 - **`obtener_contacto`** centraliza qué datos son públicos en un solo lugar
   auditable.
 
@@ -225,8 +237,8 @@ Ninguna capa es confiable sola, y por eso existe la siguiente sección.
 
 ### Evaluación
 
-Un prompt con buenas intenciones no es evidencia. La batería tiene 23 casos y
-**14 son adversariales**, porque un agente probado sólo con preguntas amables no
+Un prompt con buenas intenciones no es evidencia. La batería tiene 24 casos y
+**15 son adversariales**, porque un agente probado sólo con preguntas amables no
 dice nada sobre su confiabilidad.
 
 | Categoría | Qué ataca | Ejemplos |
@@ -254,7 +266,7 @@ Un test así envejece con los datos: el caso citaba Kubernetes como hueco hasta
 que el perfil pasó a correr n8n sobre Kubernetes. Cuando eso pasa, lo que se
 corrige es el test, no el perfil.
 
-Aparte, 52 tests de contrato corren con un proveedor mock, sin credenciales y sin
+Aparte, 61 tests de contrato corren con un proveedor mock, sin credenciales y sin
 gastar tokens, y validan el protocolo: campos requeridos, orden de eventos SSE,
 monotonía de `sequence_number`, `event:` coincidiendo con `type`, terminal
 `[DONE]` y códigos de error.

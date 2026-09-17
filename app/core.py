@@ -299,16 +299,31 @@ class Profile:
 
     # ---- búsqueda determinista (usada por las herramientas) --------------
     @staticmethod
-    def _puntuar(terminos: list[str], destacado: str, texto: str) -> float:
-        """3 puntos si pega en lo destacado, 1 si pega en cualquier parte."""
+    def _puntuar(terminos: list[str], destacado: str, texto: str) -> tuple[float, str]:
+        """Devuelve (score, fuerza de la evidencia).
+
+        La distinción es el punto: un término que pega en lo DESTACADO —título,
+        puesto, nombre de proyecto, stack, keywords— es experiencia declarada.
+        Uno que sólo pega dentro de la prosa del registro es, a lo mucho, un
+        tema que el perfil roza.
+
+        Los dos sumaban al mismo booleano, y por eso un requisito de "core
+        bancario" salía cubierto apoyado en "convención bancaria base 360", que
+        es una convención de conteo de días, no integración con un core
+        bancario. Ese estiramiento se detecta en la primera entrevista.
+        """
         score = 0.0
+        directa = False
         for t in terminos:
             variantes = _variantes(t)
             if any(v in destacado for v in variantes):
                 score += 3.0
+                directa = True
             elif any(v in texto for v in variantes):
                 score += 1.0
-        return score
+        if score <= 0:
+            return 0.0, "sin_evidencia"
+        return score, "directa" if directa else "adyacente"
 
     def buscar(self, consulta: str, limite: int = 5) -> list[dict[str, Any]]:
         """Scoring léxico sobre experiencia + proyectos + publicaciones.
@@ -317,11 +332,15 @@ class Profile:
         vocabulario es técnico y literal, y un match léxico es explicable,
         instantáneo y no necesita infraestructura extra.
 
+        Cada resultado viaja con su `evidencia`: "directa" o "adyacente". Sin
+        eso, quien consume la búsqueda no puede distinguir un match en el stack
+        de uno dentro de una frase en prosa, y `evaluar_encaje` termina
+        presentando lo segundo como cobertura.
+
         Las publicaciones se recorren aquí y no en una herramienta aparte
         porque `evaluar_encaje` se apoya en esta función: si no estuvieran, una
-        vacante que pidiera publicaciones daría `cubierto: false` contra una
-        publicación arbitrada que sí existe. Un falso negativo sobre una
-        credencial real es tan grave como una alucinación.
+        vacante que pidiera publicaciones daría sin evidencia contra una
+        publicación arbitrada que sí existe.
 
         La categoría del registro entra al texto buscable porque es un dato
         real del perfil, no un sinónimo inventado: sin ella, buscar
@@ -332,31 +351,51 @@ class Profile:
         if not terminos:
             return []
 
-        candidatos: list[tuple[float, dict[str, Any]]] = []
+        candidatos: list[tuple[float, bool, dict[str, Any]]] = []
+
+        def considerar(registro: dict[str, Any], tipo: str, destacado: str, texto: str) -> None:
+            score, fuerza = self._puntuar(terminos, destacado, texto)
+            if score > 0:
+                # tipo y evidencia se calculan aquí: mandan sobre el registro.
+                candidatos.append(
+                    (score, fuerza == "directa", {**registro, "tipo": tipo, "evidencia": fuerza})
+                )
 
         for e in self.experiencia:
-            destacado = _fold(f"{e.get('puesto', '')} {' '.join(e.get('stack', []) or [])}")
-            texto = _fold("experiencia " + json.dumps(e, ensure_ascii=False))
-            score = self._puntuar(terminos, destacado, texto)
-            if score > 0:
-                candidatos.append((score, {"tipo": "experiencia", **e}))
+            considerar(
+                e,
+                "experiencia",
+                _fold(f"{e.get('puesto', '')} {' '.join(e.get('stack', []) or [])}"),
+                _fold("experiencia " + json.dumps(e, ensure_ascii=False)),
+            )
 
         for pr in self.proyectos:
-            destacado = _fold(f"{pr.get('nombre', '')} {' '.join(pr.get('stack', []) or [])}")
-            texto = _fold("proyecto " + json.dumps(pr, ensure_ascii=False))
-            score = self._puntuar(terminos, destacado, texto)
-            if score > 0:
-                candidatos.append((score, {"tipo": "proyecto", **pr}))
+            considerar(
+                pr,
+                "proyecto",
+                _fold(f"{pr.get('nombre', '')} {' '.join(pr.get('stack', []) or [])}"),
+                _fold("proyecto " + json.dumps(pr, ensure_ascii=False)),
+            )
 
         for pub in self.publicaciones:
-            destacado = _fold(f"{pub.get('titulo', '')} {pub.get('medio', '')}")
-            texto = _fold("publicacion " + json.dumps(pub, ensure_ascii=False))
-            score = self._puntuar(terminos, destacado, texto)
-            if score > 0:
-                candidatos.append((score, {"tipo": "publicacion", **pub}))
+            # Los keywords van a lo destacado, no a la prosa: son etiquetas que
+            # alguien puso a propósito, tan declaradas como un stack. Dejarlos
+            # en prosa marcaría "NLP" como adyacente contra un artículo
+            # arbitrado de NLP, que es el falso negativo al revés.
+            considerar(
+                pub,
+                "publicacion",
+                _fold(
+                    f"{pub.get('titulo', '')} {pub.get('medio', '')} "
+                    + " ".join(pub.get("keywords", []) or [])
+                ),
+                _fold("publicacion " + json.dumps(pub, ensure_ascii=False)),
+            )
 
-        candidatos.sort(key=lambda x: x[0], reverse=True)
-        return [c for _, c in candidatos[:limite]]
+        # La evidencia directa gana sobre la adyacente aunque sume menos puntos:
+        # tres menciones de pasada no valen más que un match en el stack.
+        candidatos.sort(key=lambda c: (c[1], c[0]), reverse=True)
+        return [registro for _, _, registro in candidatos[:limite]]
 
 
 @lru_cache(maxsize=1)

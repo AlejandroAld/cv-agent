@@ -87,7 +87,10 @@ HERRAMIENTAS_INTERNAS: list[dict[str, Any]] = [
             "Busca experiencias, proyectos y publicaciones del perfil por "
             "tecnología, dominio o palabra clave. Úsala cuando pregunten por una "
             "tecnología o tema específico y quieras citar los registros exactos. "
-            "Las publicaciones traen su URL: dala tal cual si la piden."
+            "Las publicaciones traen su URL: dala tal cual si la piden. "
+            "Cada resultado trae su `evidencia`: 'directa' si el término aparece en el "
+            "puesto, nombre, stack o keywords, 'adyacente' si sólo aparece dentro de una "
+            "frase. Lo adyacente se menciona como tal, no como experiencia."
         ),
         "parameters": {
             "type": "object",
@@ -119,8 +122,10 @@ HERRAMIENTAS_INTERNAS: list[dict[str, Any]] = [
         "type": "function",
         "name": "evaluar_encaje",
         "description": (
-            "Compara el perfil contra el texto de una vacante o una lista de requisitos "
-            "y devuelve, por requisito, la evidencia encontrada o la ausencia de ella. "
+            "Compara el perfil contra el texto de una vacante o una lista de requisitos. "
+            "Devuelve, por requisito, una cobertura de tres estados: 'directa' "
+            "(aparece en un puesto, nombre, stack o keyword), 'adyacente' (sólo aparece "
+            "dentro de una frase, el perfil roza el tema sin declararlo) o 'sin_evidencia'. "
             "Úsala cuando peguen una descripción de puesto o pregunten '¿encajas en...?'."
         ),
         "parameters": {
@@ -156,6 +161,7 @@ def _evidencia(hit: dict[str, Any]) -> dict[str, Any]:
     ev: dict[str, Any] = {
         "id": hit.get("id"),
         "nombre": hit.get("nombre") or hit.get("puesto") or hit.get("titulo"),
+        "evidencia": hit.get("evidencia"),
         "stack": hit.get("stack", []),
     }
     if hit.get("url"):
@@ -206,21 +212,40 @@ def ejecutar_herramienta(nombre: str, argumentos: dict[str, Any]) -> dict[str, A
         evaluacion = []
         for req in [str(r) for r in reqs][:15]:
             hits = p.buscar(req, 2)
+            if any(h.get("evidencia") == "directa" for h in hits):
+                cobertura = "directa"
+            elif hits:
+                cobertura = "adyacente"
+            else:
+                cobertura = "sin_evidencia"
             evaluacion.append(
                 {
                     "requisito": req,
-                    "cubierto": bool(hits),
+                    "cobertura": cobertura,
                     "evidencia": [_evidencia(h) for h in hits] or None,
                 }
             )
-        cubiertos = sum(1 for e in evaluacion if e["cubierto"])
+        coberturas = [e["cobertura"] for e in evaluacion]
         return {
             "total": len(evaluacion),
-            "cubiertos": cubiertos,
+            # Tres conteos y no uno: un "4 de 5" esconde justo la diferencia
+            # entre lo que se puede afirmar y lo que sólo se roza.
+            "directos": coberturas.count("directa"),
+            "adyacentes": coberturas.count("adyacente"),
+            "sin_evidencia": coberturas.count("sin_evidencia"),
             "evaluacion": evaluacion,
             "instruccion": (
-                "Reporta honestamente lo no cubierto. No presentes un requisito sin "
-                "evidencia como si estuviera cubierto."
+                "Reporta cada requisito con la fuerza de su evidencia, no como un sí o un no. "
+                "'directa': el término aparece en un puesto, nombre de proyecto, stack o "
+                "keyword del perfil. Es experiencia declarada y puedes afirmarla. "
+                "'adyacente': el término sólo aparece dentro de una frase en prosa, así que "
+                "el perfil ROZA el tema pero no lo declara como experiencia. Repórtalo COMO "
+                "adyacente, di explícitamente en qué consiste el parecido y qué falta; nunca "
+                "lo presentes como cubierto. Ejemplo: 'core bancario' con evidencia adyacente "
+                "en 'convención bancaria base 360' es cálculo de intereses con una convención "
+                "de conteo de días, no integración con un core bancario, y presentarlo como "
+                "encaje se detecta en la primera entrevista. "
+                "'sin_evidencia': dilo sin rodeos y ofrece lo más cercano que sí tengas."
             ),
         }
 
