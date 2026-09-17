@@ -262,17 +262,23 @@ def test_agent_card(cli):
 
 # --- herramientas internas -------------------------------------------------
 def test_herramientas_internas_no_alucinan():
+    """Kubernetes ya NO sirve como ejemplo de hueco: el perfil lo cubre.
+
+    n8n corre autohospedado sobre Kubernetes y está en habilidades. Se usan
+    Terraform y Rust, que sí están ausentes del perfil; si algún día dejan de
+    estarlo, este test debe cambiar, no el código.
+    """
     from app.agent_brain import ejecutar_herramienta
 
-    vacio = ejecutar_herramienta("buscar_en_perfil", {"consulta": "kubernetes terraform"})
+    vacio = ejecutar_herramienta("buscar_en_perfil", {"consulta": "terraform rust"})
     assert vacio["encontrados"] == 0 and vacio["nota"]
 
     hit = ejecutar_herramienta("buscar_en_perfil", {"consulta": "n8n WhatsApp"})
     assert hit["encontrados"] > 0
 
-    encaje = ejecutar_herramienta("evaluar_encaje", {"requisitos": ["Kubernetes", "Firebase"]})
+    encaje = ejecutar_herramienta("evaluar_encaje", {"requisitos": ["Terraform", "Firebase"]})
     por_req = {e["requisito"]: e["cubierto"] for e in encaje["evaluacion"]}
-    assert por_req["Kubernetes"] is False, "debe reportar honestamente lo que no cubre"
+    assert por_req["Terraform"] is False, "debe reportar honestamente lo que no cubre"
     assert por_req["Firebase"] is True
 
     assert ejecutar_herramienta("obtener_detalle", {"id": "nope"})["error"] == "not_found"
@@ -673,3 +679,107 @@ def test_store_false_tambien_se_respeta_en_streaming(cli):
     final = next(p for t, p in eventos if t == "response.completed")["response"]
     assert final["store"] is False
     assert cli.get(f"/v1/responses/{final['id']}", headers=H).status_code == 404
+
+
+# --- el perfil se renderiza completo en el system prompt --------------------
+# Los cuatro asserts de abajo cubren dos bugs reales: la sección
+# "publicaciones" no tenía rama en como_contexto() y nunca llegaba al modelo,
+# y "certificaciones" cambió de strings a dicts, así que el prompt llevaba el
+# repr de un diccionario.
+def test_system_prompt_incluye_el_titulo_de_la_publicacion():
+    from app.agent_brain import construir_system_prompt
+
+    assert "Detection of Tendency to Depression through Text Analysis" in construir_system_prompt()
+
+
+def test_system_prompt_incluye_la_url_completa_de_la_publicacion():
+    """La URL es lo que hace la cita verificable: va entera y literal."""
+    from app.agent_brain import construir_system_prompt
+
+    assert "https://www.cys.cic.ipn.mx/ojs/index.php/CyS/article/view/5887" in construir_system_prompt()
+
+
+def test_system_prompt_no_lleva_el_repr_de_un_dict():
+    from app.agent_brain import construir_system_prompt
+
+    assert "{'nombre'" not in construir_system_prompt()
+
+
+def test_system_prompt_rinde_certificacion_con_su_estado():
+    from app.agent_brain import construir_system_prompt
+
+    sp = construir_system_prompt()
+    assert "Microsoft AI-103" in sp
+    assert "En curso" in sp
+
+
+def test_certificaciones_acepta_strings_sueltos():
+    """El formato ya cambió una vez; que un string suelto no rompa el render."""
+    from app.core import Profile
+
+    p = Profile(raw={"certificaciones": [
+        {"nombre": "Con dict", "estado": "En curso"},
+        "Suelta sin estado",
+        {"nombre": "Sin estado"},
+        {"estado": "huérfano, sin nombre"},
+    ]})
+    ctx = p.como_contexto()
+    assert "- Con dict (En curso)" in ctx
+    assert "- Suelta sin estado" in ctx
+    assert "- Sin estado" in ctx
+    assert "huérfano" not in ctx, "sin nombre no hay nada que afirmar"
+    assert "{" not in ctx.split("# Certificaciones")[1]
+
+
+# --- las publicaciones son recuperables y citables -------------------------
+def test_buscar_encuentra_la_publicacion():
+    from app.core import get_profile
+
+    for consulta in ("publicaciones", "publicaciones arbitradas", "revista arbitrada", "depression"):
+        hits = get_profile().buscar(consulta, 6)
+        assert any(h.get("id") == "pub-1" for h in hits), f"{consulta!r} no la encontró"
+
+
+def test_obtener_detalle_resuelve_una_publicacion():
+    from app.agent_brain import ejecutar_herramienta
+
+    d = ejecutar_herramienta("obtener_detalle", {"id": "pub-1"})
+    assert d["tipo"] == "publicacion"
+    assert d["url"].startswith("https://")
+    assert "error" not in d
+
+
+def test_evaluar_encaje_acredita_la_publicacion_con_su_url():
+    """El falso negativo que motivó meterlas en buscar(): una vacante que pide
+    publicaciones no puede decir `cubierto: false` contra una real."""
+    from app.agent_brain import ejecutar_herramienta
+
+    encaje = ejecutar_herramienta("evaluar_encaje", {"requisitos": ["Publicaciones arbitradas"]})
+    req = encaje["evaluacion"][0]
+    assert req["cubierto"] is True
+    urls = [e.get("url") for e in req["evidencia"] or []]
+    assert any(u and "cys.cic.ipn.mx" in u for u in urls), "la evidencia debe traer la URL"
+
+
+def test_ids_de_ejemplo_de_obtener_detalle_existen_de_verdad():
+    """La descripción citaba ids muertos. Que no vuelva a pasar en silencio."""
+    import re
+
+    from app.agent_brain import HERRAMIENTAS_INTERNAS
+    from app.core import get_profile
+
+    desc = next(t for t in HERRAMIENTAS_INTERNAS if t["name"] == "obtener_detalle")["description"]
+    citados = re.findall(r"'([a-z]+-[a-z0-9-]+)'", desc)
+    assert citados, "la descripción debe seguir dando ejemplos"
+
+    p = get_profile()
+    reales = {r.get("id") for r in (p.experiencia + p.proyectos + p.publicaciones)}
+    for ident in citados:
+        assert ident in reales, f"{ident!r} ya no existe en el perfil"
+
+
+def test_publicaciones_derivan_id_estable():
+    from app.core import Profile
+
+    p = Profile(raw={"publicaciones": [{"titulo": "A"}, {"titulo": "B", "id": "propio"}]})
+    assert [x["id"] for x in p.publicaciones] == ["pub-1", "propio"], "el id del YAML gana"

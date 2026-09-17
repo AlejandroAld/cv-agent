@@ -104,6 +104,20 @@ def _fold(text: str) -> str:
     return "".join(c for c in norm if unicodedata.category(c) != "Mn")
 
 
+def _variantes(termino: str) -> tuple[str, ...]:
+    """El término y su singular, para que 'proyectos' encuentre 'proyecto'.
+
+    El match es por subcadena, así que sin esto 'arbitradas' no encuentra
+    'arbitrada' y una vacante en plural da falso negativo. Sólo se recorta a
+    partir de cinco caracteres: 'has' o 'api' recortados generan ruido.
+    """
+    if len(termino) <= 4:
+        return (termino,)
+    if termino.endswith("es"):
+        return (termino, termino[:-1], termino[:-2])
+    return (termino, termino[:-1])
+
+
 @dataclass
 class Profile:
     raw: dict[str, Any] = field(default_factory=dict)
@@ -128,6 +142,21 @@ class Profile:
     @property
     def habilidades(self) -> list[dict[str, Any]]:
         return self.raw.get("habilidades", []) or []
+
+    @property
+    def publicaciones(self) -> list[dict[str, Any]]:
+        """Las publicaciones, con un id derivado para poder citarlas.
+
+        Esta sección del YAML no trae id propio. Se deriva por posición para
+        que `obtener_detalle` pueda resolverla igual que una experiencia o un
+        proyecto: sin id no hay cita verificable, que es para lo que existen
+        las herramientas. Si el YAML llega a traer uno, ese gana.
+        """
+        salida: list[dict[str, Any]] = []
+        for i, pub in enumerate(self.raw.get("publicaciones", []) or [], start=1):
+            if isinstance(pub, dict):
+                salida.append({"id": f"pub-{i}", **pub})
+        return salida
 
     @property
     def faq(self) -> list[dict[str, Any]]:
@@ -221,9 +250,35 @@ class Profile:
                 )
             )
 
-        certs = self.raw.get("certificaciones") or []
-        if certs:
-            partes.append("# Certificaciones\n" + "\n".join(f"- {c}" for c in certs))
+        if self.publicaciones:
+            bloques = []
+            for pub in self.publicaciones:
+                cuerpo = [f"[{pub.get('id')}] {pub.get('titulo','')}"]
+                if pub.get("medio"):
+                    cuerpo.append(f"  Medio: {pub['medio']}")
+                if pub.get("idioma"):
+                    cuerpo.append(f"  Idioma: {pub['idioma']}")
+                # La URL va completa y literal: es lo que hace la cita
+                # verificable, y el agente debe poder darla si se la piden.
+                if pub.get("url"):
+                    cuerpo.append(f"  URL: {pub['url']}")
+                bloques.append("\n".join(cuerpo))
+            partes.append("# Publicaciones\n" + "\n\n".join(bloques))
+
+        # Las certificaciones son dicts {nombre, estado}, pero se acepta un
+        # string suelto: el formato de esta sección ya cambió una vez.
+        lineas_cert = []
+        for c in self.raw.get("certificaciones") or []:
+            if isinstance(c, dict):
+                nombre = str(c.get("nombre") or "").strip()
+                if not nombre:
+                    continue  # sin nombre no hay nada que afirmar
+                estado = str(c.get("estado") or "").strip()
+                lineas_cert.append(f"- {nombre} ({estado})" if estado else f"- {nombre}")
+            elif c:
+                lineas_cert.append(f"- {c}")
+        if lineas_cert:
+            partes.append("# Certificaciones\n" + "\n".join(lineas_cert))
 
         if self.faq:
             partes.append(
@@ -243,28 +298,62 @@ class Profile:
         return "\n\n".join(partes)
 
     # ---- búsqueda determinista (usada por las herramientas) --------------
+    @staticmethod
+    def _puntuar(terminos: list[str], destacado: str, texto: str) -> float:
+        """3 puntos si pega en lo destacado, 1 si pega en cualquier parte."""
+        score = 0.0
+        for t in terminos:
+            variantes = _variantes(t)
+            if any(v in destacado for v in variantes):
+                score += 3.0
+            elif any(v in texto for v in variantes):
+                score += 1.0
+        return score
+
     def buscar(self, consulta: str, limite: int = 5) -> list[dict[str, Any]]:
-        """Scoring léxico simple sobre experiencia + proyectos.
+        """Scoring léxico sobre experiencia + proyectos + publicaciones.
 
         A propósito NO es embeddings: el corpus son decenas de registros, el
         vocabulario es técnico y literal, y un match léxico es explicable,
         instantáneo y no necesita infraestructura extra.
+
+        Las publicaciones se recorren aquí y no en una herramienta aparte
+        porque `evaluar_encaje` se apoya en esta función: si no estuvieran, una
+        vacante que pidiera publicaciones daría `cubierto: false` contra una
+        publicación arbitrada que sí existe. Un falso negativo sobre una
+        credencial real es tan grave como una alucinación.
+
+        La categoría del registro entra al texto buscable porque es un dato
+        real del perfil, no un sinónimo inventado: sin ella, buscar
+        "publicaciones" no encuentra la publicación, porque esa palabra no
+        aparece dentro del registro.
         """
         terminos = [t for t in _fold(consulta).split() if len(t) > 2]
         if not terminos:
             return []
 
         candidatos: list[tuple[float, dict[str, Any]]] = []
+
         for e in self.experiencia:
-            texto = _fold(json.dumps(e, ensure_ascii=False))
-            score = sum(3.0 if t in _fold(e.get("puesto", "") + " " + " ".join(e.get("stack", []) or [])) else (1.0 if t in texto else 0.0) for t in terminos)
+            destacado = _fold(f"{e.get('puesto', '')} {' '.join(e.get('stack', []) or [])}")
+            texto = _fold("experiencia " + json.dumps(e, ensure_ascii=False))
+            score = self._puntuar(terminos, destacado, texto)
             if score > 0:
                 candidatos.append((score, {"tipo": "experiencia", **e}))
+
         for pr in self.proyectos:
-            texto = _fold(json.dumps(pr, ensure_ascii=False))
-            score = sum(3.0 if t in _fold(pr.get("nombre", "") + " " + " ".join(pr.get("stack", []) or [])) else (1.0 if t in texto else 0.0) for t in terminos)
+            destacado = _fold(f"{pr.get('nombre', '')} {' '.join(pr.get('stack', []) or [])}")
+            texto = _fold("proyecto " + json.dumps(pr, ensure_ascii=False))
+            score = self._puntuar(terminos, destacado, texto)
             if score > 0:
                 candidatos.append((score, {"tipo": "proyecto", **pr}))
+
+        for pub in self.publicaciones:
+            destacado = _fold(f"{pub.get('titulo', '')} {pub.get('medio', '')}")
+            texto = _fold("publicacion " + json.dumps(pub, ensure_ascii=False))
+            score = self._puntuar(terminos, destacado, texto)
+            if score > 0:
+                candidatos.append((score, {"tipo": "publicacion", **pub}))
 
         candidatos.sort(key=lambda x: x[0], reverse=True)
         return [c for _, c in candidatos[:limite]]

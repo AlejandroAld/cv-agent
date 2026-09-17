@@ -68,7 +68,7 @@ Navegador (demo del sitio)        Cualquier cliente Open Responses
 | `app/core.py` | Configuración, logging estructurado, carga y búsqueda del perfil |
 | `app/static/index.html` | Interfaz de chat del sitio personal |
 | `data/perfil.yaml` | **Fuente única de verdad.** Todo hecho que el agente afirma vive aquí |
-| `tests/` | 42 tests de contrato contra el spec y contra el cuerpo que sale al proveedor |
+| `tests/` | 52 tests de contrato contra el spec, el cuerpo que sale al proveedor y el render del perfil |
 | `evals/` | Batería de 23 casos, 14 de ellos adversariales |
 
 ---
@@ -109,7 +109,12 @@ Sirven para otra cosa:
   enfrentar cada requisito por separado en vez de escribir un párrafo optimista,
   y es lo que hace que el agente admita "esto no lo cubro".
 - **`buscar_en_perfil` y `obtener_detalle`** anclan la respuesta a un registro con
-  id, así la cita es verificable.
+  id, así la cita es verificable. Recorren experiencia, proyectos **y
+  publicaciones**: si la búsqueda no viera las publicaciones, `evaluar_encaje`
+  reportaría `cubierto: false` ante una vacante que pida investigación, contra
+  una publicación arbitrada que sí existe. Un falso negativo sobre una
+  credencial real hace el mismo daño que una alucinación, en la otra
+  dirección.
 - **`obtener_contacto`** centraliza qué datos son públicos en un solo lugar
   auditable.
 
@@ -242,11 +247,14 @@ Dos capas de juicio, deliberadamente separadas:
   acaba ignorando, que es peor que no tenerlo.
 
 El caso que más me interesa es `encaje-vacante`: se le pasa una vacante con
-Kubernetes y core bancario, que no tengo, y aprueba sólo si el agente señala
-explícitamente lo que no cubre. Un agente que se vende como encaje perfecto
-reprueba ese test.
+Terraform y core bancario, y aprueba sólo si el agente señala explícitamente lo
+que no cubre. Un agente que se vende como encaje perfecto reprueba ese test.
 
-Aparte, 42 tests de contrato corren con un proveedor mock, sin credenciales y sin
+Un test así envejece con los datos: el caso citaba Kubernetes como hueco hasta
+que el perfil pasó a correr n8n sobre Kubernetes. Cuando eso pasa, lo que se
+corrige es el test, no el perfil.
+
+Aparte, 52 tests de contrato corren con un proveedor mock, sin credenciales y sin
 gastar tokens, y validan el protocolo: campos requeridos, orden de eventos SSE,
 monotonía de `sequence_number`, `event:` coincidiendo con `type`, terminal
 `[DONE]` y códigos de error.

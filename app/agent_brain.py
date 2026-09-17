@@ -84,9 +84,10 @@ HERRAMIENTAS_INTERNAS: list[dict[str, Any]] = [
         "type": "function",
         "name": "buscar_en_perfil",
         "description": (
-            "Busca experiencias y proyectos del perfil por tecnología, dominio "
-            "o palabra clave. Úsala cuando pregunten por una tecnología o tema "
-            "específico y quieras citar los registros exactos."
+            "Busca experiencias, proyectos y publicaciones del perfil por "
+            "tecnología, dominio o palabra clave. Úsala cuando pregunten por una "
+            "tecnología o tema específico y quieras citar los registros exactos. "
+            "Las publicaciones traen su URL: dala tal cual si la piden."
         ),
         "parameters": {
             "type": "object",
@@ -104,9 +105,9 @@ HERRAMIENTAS_INTERNAS: list[dict[str, Any]] = [
         "type": "function",
         "name": "obtener_detalle",
         "description": (
-            "Devuelve el registro completo de una experiencia o proyecto por su id "
-            "(p. ej. 'exp-plan-piso', 'proy-bot-ventas'). Úsala cuando pidan profundidad "
-            "sobre algo concreto."
+            "Devuelve el registro completo de una experiencia, un proyecto o una "
+            "publicación por su id (p. ej. 'exp-dalton', 'proy-agentes-whatsapp'). "
+            "Úsala cuando pidan profundidad sobre algo concreto."
         ),
         "parameters": {
             "type": "object",
@@ -145,6 +146,23 @@ HERRAMIENTAS_INTERNAS: list[dict[str, Any]] = [
 NOMBRES_INTERNOS = {t["name"] for t in HERRAMIENTAS_INTERNAS}
 
 
+def _evidencia(hit: dict[str, Any]) -> dict[str, Any]:
+    """Una línea de evidencia para `evaluar_encaje`.
+
+    Una publicación no tiene `nombre` ni `puesto` ni `stack`; sin el `titulo`
+    en la cadena de respaldo saldría como evidencia vacía, que es peor que no
+    devolverla. La URL viaja para que la cita sea verificable.
+    """
+    ev: dict[str, Any] = {
+        "id": hit.get("id"),
+        "nombre": hit.get("nombre") or hit.get("puesto") or hit.get("titulo"),
+        "stack": hit.get("stack", []),
+    }
+    if hit.get("url"):
+        ev["url"] = hit["url"]
+    return ev
+
+
 def ejecutar_herramienta(nombre: str, argumentos: dict[str, Any]) -> dict[str, Any]:
     """Ejecuta una herramienta interna. Nunca lanza: los errores son datos."""
     p = get_profile()
@@ -168,10 +186,17 @@ def ejecutar_herramienta(nombre: str, argumentos: dict[str, Any]) -> dict[str, A
         for pr in p.proyectos:
             if pr.get("id") == rid:
                 return {"tipo": "proyecto", **pr}
+        for pub in p.publicaciones:
+            if pub.get("id") == rid:
+                return {"tipo": "publicacion", **pub}
         return {
             "error": "not_found",
             "id_solicitado": rid,
-            "ids_disponibles": [e.get("id") for e in p.experiencia] + [x.get("id") for x in p.proyectos],
+            "ids_disponibles": (
+                [e.get("id") for e in p.experiencia]
+                + [x.get("id") for x in p.proyectos]
+                + [b.get("id") for b in p.publicaciones]
+            ),
         }
 
     if nombre == "evaluar_encaje":
@@ -185,11 +210,7 @@ def ejecutar_herramienta(nombre: str, argumentos: dict[str, Any]) -> dict[str, A
                 {
                     "requisito": req,
                     "cubierto": bool(hits),
-                    "evidencia": [
-                        {"id": h.get("id"), "nombre": h.get("nombre") or h.get("puesto"), "stack": h.get("stack", [])}
-                        for h in hits
-                    ]
-                    or None,
+                    "evidencia": [_evidencia(h) for h in hits] or None,
                 }
             )
         cubiertos = sum(1 for e in evaluacion if e["cubierto"])
