@@ -2,220 +2,332 @@
 # FUENTE ÚNICA DE VERDAD del agente de CV.
 # El agente NO puede afirmar nada que no esté en este archivo.
 #
-# ⚠️  REVISA Y CORRIGE TODO LO MARCADO CON "VERIFICA" ANTES DE DESPLEGAR.
-#     Fechas, títulos y nombres de cliente son los que más se notan si fallan.
+# CRITERIO DE ESTE ARCHIVO: sustancia técnica y resultados medibles.
+# Sí se incluyen métricas relativas sobre trabajo propio (mejoras, adopción,
+# rendimiento) porque son lo que hace verificable un logro.
+# Se excluyen cifras absolutas de negocio (ingresos, márgenes, gasto total),
+# estructura organizacional, tamaños de plantilla, nombres de clientes, marcas
+# socias y nombres de sistemas propietarios.
 #
-# ⚠️  NDA: si tus clientes están bajo acuerdo de confidencialidad, usa
-#     descriptores genéricos ("grupo automotriz multimarca") en lugar del
-#     nombre comercial. Ya está así por defecto abajo.
+# El empleador (Grupo Dalton) y el sector (automotriz) sí se pueden nombrar.
 # =============================================================================
 
 persona:
   nombre: "José Alejandro Aldama Ramos"
   alias: "Alex"
-  titular: "AI Engineer — agentes en producción, automatización e integración de sistemas"
-  ubicacion: "Zapopan, Jalisco, México"
+  titular: "Ingeniero en Inteligencia Artificial — agentes en producción, evaluación e integración con sistemas de negocio"
+  ubicacion: "Guadalajara, Jalisco, México"
   zona_horaria: "America/Mexico_City"
-  disponibilidad: "Abierto a posiciones senior de IA aplicada en México (híbrido o remoto)"  # VERIFICA
+  disponibilidad: "Abierto a posiciones de ingeniería de IA en México, presencial, híbrido o remoto. Con disponibilidad para reubicarme a Ciudad de México."
   idiomas:
     - idioma: "Español"
       nivel: "Nativo"
     - idioma: "Inglés"
-      nivel: "Profesional"   # VERIFICA: ¿B2, C1?
+      nivel: "B2, competencia profesional de trabajo. Lectura y escritura técnica fluidas, con una publicación arbitrada escrita en inglés. Conversacional en nivel intermedio alto, en mejora activa."
   contacto:
     email: "josealejandroaldamaramos@gmail.com"
-    linkedin: ""             # VERIFICA: pega tu URL
-    github: ""               # VERIFICA: pega tu URL
+    linkedin: "https://www.linkedin.com/in/jose-alejandro-aldama-ramos/"
+    github: "https://github.com/AlejandroAld"
   # Datos que el agente NUNCA debe revelar aunque se los pidan.
   privado:
     - "teléfono"
     - "dirección"
     - "expectativa salarial"
-    - "nombres de clientes bajo NDA"
+    - "sueldo actual o anterior, exacto o aproximado"
+    - "nombres de clientes del grupo, marcas socias y sistemas propietarios"
+    - "métricas de negocio: ventas, ingresos, márgenes, costos operativos en cifras absolutas"
+    - "tamaño de equipos, plantillas y cambios de plantilla"
+    - "estructura organizacional interna del empleador"
+    - "URLs de sitios internos o de propiedad del empleador"
+    - "empresas donde hay procesos de selección activos"
 
 resumen: >
-  AI Engineer con foco en llevar sistemas de IA a producción, no a prototipo.
-  Diseña y opera agentes conversacionales sobre WhatsApp, pipelines de
-  automatización y aplicaciones web que sostienen operación real de negocio en
-  el sector automotriz y financiero mexicano. Trabaja de punta a punta:
-  arquitectura, integración con sistemas legacy (SQL Server, CRM, ERP),
-  despliegue, seguridad y monitoreo. Cofundador de una consultora de IA
-  industrial B2B.
+  Ingeniero en Inteligencia Artificial por el IPN, con publicación arbitrada en
+  NLP. Mi trabajo es llevar sistemas de IA a producción y sostenerlos ahí. Hoy
+  soy responsable técnico de las soluciones de IA generativa en producción de un
+  grupo automotriz: arquitectura de tool calling contra los sistemas del negocio,
+  gestión de contexto y memoria para conversaciones de varios días, escalamiento
+  a humano, y toda la capa que los mantiene vivos, que es suite de evaluación
+  anclada en modos de falla reales, pruebas de regresión ante cada cambio,
+  trazabilidad y medición de costo y latencia por interacción. También construí
+  las plataformas web que hacen auditable esa operación: mini CRMs por línea de
+  negocio donde una persona revisa, valida, aprueba y corrige lo que el agente
+  produce. Y la parte determinista: los procesos que exigen reproducibilidad
+  contable no pasan por un modelo.
 
 experiencia:
-  - id: "exp-ai-automation"
-    puesto: "AI Engineer / Arquitecto de automatización"          # VERIFICA título exacto
-    empresa: "Novacti"                                             # VERIFICA
-    cliente: "Grupo automotriz multimarca (bajo NDA)"
-    inicio: "2024"                                                 # VERIFICA
+  - id: "exp-dalton"
+    puesto: "Desarrollador de Inteligencia Artificial"
+    empresa: "Grupo Dalton"
+    cliente: "Interno. Sector automotriz."
+    inicio: "2025-11"
     fin: "actual"
     ubicacion: "Guadalajara, Jalisco"
     resumen: >
-      Responsable técnico de la suite de agentes conversacionales y
-      automatizaciones que atiende leads de venta, valuación de vehículos y
-      agendamiento en cinco sucursales de un grupo automotriz.
+      Responsable técnico de las soluciones de IA generativa en producción, de
+      extremo a extremo: arquitectura, integración con los sistemas de negocio,
+      despliegue, seguridad, evaluación y monitoreo.
     logros:
-      - "Diseñó y opera un bot de ventas por WhatsApp multiagente (180+ nodos en n8n) que perfila leads, busca inventario, calcula financiamiento, entrega fotos y agenda citas."
-      - "Construyó un subagente de búsqueda de inventario con cascada de fallback SQL de 7 niveles, para que la consulta degrade en vez de fallar cuando el cliente da datos parciales."
-      - "Integró Microsoft Dynamics 365 CRM, SQL Server, PostgreSQL, Redis y Azure Blob Storage detrás de una sola conversación de WhatsApp."
-      - "Resolvió agendamiento con horarios diferenciados por región mediante un nodo de validación determinista, eliminando la generación de citas fuera de horario que producía el LLM."
-      - "Montó sincronización diaria de inventario con intercambio de tablas A/B para evitar lecturas sucias durante la carga."
-    stack: ["n8n", "Azure OpenAI GPT-4o", "LangChain", "PostgreSQL", "SQL Server", "Redis", "Evolution API (WhatsApp)", "Microsoft Dynamics 365", "Microsoft Graph API"]
+      - "Opero cuatro agentes conversacionales con tráfico real de clientes sobre WhatsApp Business API, con estado de sesión, catálogo de herramientas y almacén de conversación independientes."
+      - "Construí la arquitectura de tool calling sobre n8n autohospedado en Kubernetes, con Claude vía la API de Anthropic desplegada en Azure AI Foundry: más de una docena de herramientas propias conectadas a endpoints HTTP, salidas estructuradas con JSON Schema, enrutamiento por máquina de estados y escalamiento a humano."
+      - "Recibí un sistema de más de 180 nodos donde la lógica estaba repartida, se perdía contexto entre saltos y los errores no eran reproducibles. Lo reconstruí sobre un orquestador único y trazable con estado explícito, y el costo mensual de operación bajó 92% mientras el volumen atendido crecía."
+      - "Diseñé desde cero la estrategia de evaluación: una suite offline anclada en modos de falla reales de producción, no en casos sintéticos, que mide corrección factual contra fuente de verdad, selección correcta de herramienta y parámetros, y respeto a los límites del agente. Corre ante cada cambio como prueba de regresión y decide si un cambio de prompt sale o se revierte."
+      - "Desplegué LangSmith sobre el clúster de Kubernetes para trazado de agentes, más analítica propia en SQL que mide calidad, costo y latencia por interacción."
+      - "Construí guardarraíles anti-alucinación con una capa de validación de salida que bloquea respuestas no sustentadas en el resultado de una herramienta, y agentes revisores que auditan la salida antes de que llegue al cliente."
+      - "Diseñé y desplegué un servidor MCP (Model Context Protocol) en Node sobre Cloud Run con OAuth y permisos por rol, que expone sistemas internos como conector para consulta en lenguaje natural, con alcance acotado por rol y manejo de excepciones en cada llamada."
+      - "Implementé RAG con bases vectoriales sobre documentos PDF y XML, con ingesta, limpieza, chunking, indexación y recuperación, más visión por computadora para identificación por imagen."
+      - "Resolví el control de concurrencia por conversación con Redis: captura los mensajes que llegan mientras una ejecución del flujo ya está en curso, que es el modo de falla clásico de mensajería cuando un usuario manda varios mensajes cortos seguidos."
+      - "Construí todas las plataformas web que hacen auditable la operación de agentes: mini CRMs por línea de negocio donde una persona revisa, valida, aprueba y corrige lo que el agente produce antes de que tenga efecto. Es la capa de human-in-the-loop del sistema, no un tablero de reportes: sin ella los agentes no serían operables ni auditables por el negocio."
+      - "Definí el control de acceso de toda la arquitectura: RBAC granular, permisos mínimos por herramienta, aislamiento por tenant y OAuth 2.0 / JWT en cada integración que toca datos de clientes."
+      - "Construí un motor determinista de máquina de estados sobre Cloud Functions para los procesos contables que exigen reproducibilidad y auditoría, deliberadamente sin modelo de por medio: cálculo periódico con historial auditable, sincronización con ERP y generación de documentos firmados digitalmente."
+      - "Integré MS Dynamics 365 con Dataverse, ERP y un CRM construido de cero incluido el modelo de datos, sobre PostgreSQL, SQL Server y Azure Cosmos DB, con cortes sin downtime mediante espejo por etapas y blue/green view swap."
+      - "Levanto requerimientos directamente con direcciones de negocio, traduzco la necesidad a arquitectura de solución, y documento y capacito a los equipos que operan los sistemas."
+    stack: ["Claude vía API de Anthropic sobre Microsoft Azure AI Foundry", "n8n autohospedado en Kubernetes", "MCP (Model Context Protocol)", "LangGraph", "LangChain", "LangSmith", "WhatsApp Business API", "Python", "TypeScript", "Next.js", "PostgreSQL", "SQL Server", "Azure Cosmos DB", "Firestore", "Redis", "Microsoft Dynamics 365 y Dataverse", "GCP (Cloud Run, Cloud Functions, Cloud Storage, BigQuery)", "Docker", "Kubernetes", "CI/CD", "Git"]
 
-  - id: "exp-rafi"
-    puesto: "Arquitecto e implementador — plataforma interna RAFI"
-    empresa: "Novacti"                                             # VERIFICA
-    cliente: "Grupo automotriz multimarca (bajo NDA)"
-    inicio: "2025"                                                 # VERIFICA
-    fin: "actual"
-    ubicacion: "Guadalajara, Jalisco"
+  - id: "exp-grupo-ti"
+    puesto: "Ingeniero Junior de Inteligencia Artificial"
+    empresa: "Grupo TI México"
+    cliente: "Consultoría, entrega ante cliente"
+    inicio: "2025-08"
+    fin: "2025-11"
+    ubicacion: "Ciudad de México"
     resumen: >
-      Plataforma web interna de gestión de compras y promociones sobre
-      Next.js y Firebase, en producción con usuarios reales.
+      Entrega de soluciones de IA sobre la infraestructura del cliente, en
+      esquema de consultoría con trato directo.
     logros:
-      - "Diseñó e implantó RBAC con 4 roles y matriz de permisos por módulo, incluyendo el despliegue a producción con verificación triple antes de cada paso irreversible."
-      - "Es dueño de toda la infraestructura: n8n, secretos, webhooks, IAM y configuración de Firebase en dos proyectos (dev y prod)."
-      - "Definió el flujo de ramas DEV → QA → main con despliegue automático por merge."
-    stack: ["Next.js", "TypeScript", "Firebase (Firestore, Auth, App Hosting)", "n8n", "Google Secret Manager"]
+      - "Implementé búsqueda vectorial y pipelines de RAG dentro de Oracle APEX sobre Oracle Cloud, un entorno sin soporte nativo para ninguna de las dos: ingesta de documentos, chunking, embeddings y recuperación."
+      - "Construí backends en Python y JavaScript para orquestar la ingesta de datos y servicios de visión por computadora vía APIs REST."
+    stack: ["Oracle APEX", "Oracle Cloud (OCI)", "Python", "JavaScript", "APIs REST", "bases vectoriales"]
 
-  - id: "exp-plan-piso"
-    puesto: "Ingeniero de producto — plataforma de financiamiento plan piso"
-    empresa: "Novacti"                                             # VERIFICA
-    cliente: "Grupo automotriz (movilidad eléctrica)"
-    inicio: "2025"                                                 # VERIFICA
-    fin: "actual"
-    ubicacion: "Guadalajara, Jalisco"
+  - id: "exp-loreal"
+    puesto: "Beauty Tech Intern (TI y Datos)"
+    empresa: "L'Oréal"
+    cliente: "Interno"
+    inicio: "2024-11"
+    fin: "2025-08"
+    ubicacion: "Ciudad de México"
     resumen: >
-      Software financiero en producción para administrar financiamiento de
-      inventario automotriz, con devengo diario de intereses y cierres
-      mensuales bajo convenciones bancarias mexicanas.
+      Arquitectura de datos y automatización de procesos dentro del ecosistema
+      Microsoft.
     logros:
-      - "Implementó devengo diario de intereses con convención bancaria de 360 días, IVA 16%, TIIE 28 desde la API de Banxico y calendario de días hábiles del Art. 74 LFT."
-      - "Diagnosticó y corrigió una deriva de intereses en 26+ unidades causada por un incremento atómico aplicado sobre un saldo ya reseteado por el batch de conciliación; auditoría posterior confirmó deriva cero."
-      - "Reconcilia mensualmente contra hojas de control del cliente como validación externa del cálculo."
-    stack: ["Next.js 15", "Firebase Cloud Functions v2", "Firestore", "TypeScript", "n8n", "API Banxico"]
+      - "Construí una arquitectura de datos centralizada con procesos ETL automatizados para cálculos financieros y muestreo, sustituyendo información que se mantenía de forma manual y dispersa."
+      - "Entregué un dashboard financiero interactivo adoptado por más de 40 usuarios no técnicos, lo que implicó traducir resultados analíticos a algo sobre lo que un perfil de negocio pudiera actuar."
+      - "Automaticé procesos con Power Automate y desarrollé aplicaciones con Power Apps para usuarios de negocio, con gestión de identidad en Microsoft Entra ID."
+    stack: ["Power Automate", "Power Apps", "Microsoft Entra ID", "Microsoft 365", "ETL"]
 
-  - id: "exp-renta"
-    puesto: "Product owner y desarrollador principal — SaaS de renta de flotillas"
-    empresa: "Proyecto propio / cliente"                           # VERIFICA
-    inicio: "2025"                                                 # VERIFICA
-    fin: "actual"
-    ubicacion: "Guadalajara, Jalisco"
+  - id: "exp-ipn"
+    puesto: "Investigador en IA Aplicada — NLP y Deep Learning"
+    empresa: "Instituto Politécnico Nacional"
+    cliente: "Investigación académica"
+    inicio: "2024-01"
+    fin: "2025-01"
+    ubicacion: "Ciudad de México"
     resumen: >
-      SaaS multi-tenant de administración de flotillas de renta vehicular,
-      en producción con clientes reales.
+      Investigación en detección de tendencia a la depresión mediante análisis de
+      texto sobre corpus clínico, con publicación arbitrada.
     logros:
-      - "Definió y construyó la arquitectura multi-tenant con aislamiento por middleware de contexto de tenant."
-      - "Implementó RBAC jerárquico estilo Vtiger: perfiles con visibilidad a nivel campo, roles en árbol reordenables por drag and drop y matriz de 14 módulos × 7 acciones."
-      - "Gestiona el ciclo completo: decisiones de arquitectura, implementación, comunicación con stakeholders y despliegue."
-    stack: ["Next.js 14 (App Router)", "TypeScript strict", "Firebase", "Cloud Functions Node 22", "Zod", "Tailwind", "Radix UI"]
-
-  - id: "exp-migracion-web"
-    puesto: "Líder técnico de migración web"
-    empresa: "Novacti"                                             # VERIFICA
-    cliente: "Sitio público de grupo automotriz"
-    inicio: "2025"                                                 # VERIFICA
-    fin: "actual"
-    resumen: >
-      Migración de un sitio Angular 9 con SSR a Next.js 15 con App Router,
-      conectando APIs reales de backend .NET a través de Azure APIM.
-    logros:
-      - "Subió PageSpeed de 34 a 96 y bajó LCP de 8.3 s a 2.5 s."
-      - "Estableció un patrón BFF donde el navegador solo llama route handlers internos y las API keys viven exclusivamente del lado servidor, con verificación automatizada de que ninguna llave se filtre al bundle."
-      - "Montó un check de SEO en CI que corre en cada PR que toca la app."
-    stack: ["Next.js 15", "TypeScript", "Azure APIM", ".NET", "Cosmos DB", "Vercel"]
-
-  - id: "exp-aldamai"
-    puesto: "Cofundador y líder técnico"
-    empresa: "Aldamai (Aldama Industrial Intelligence)"
-    inicio: "2025"                                                 # VERIFICA
-    fin: "actual"
-    resumen: >
-      Consultora B2B de IA industrial enfocada en transformaciones operativas
-      con ROI medible para plantas manufactureras multinacionales en México.
-    logros:
-      - "Responsable de toda la ejecución técnica y de la infraestructura del sitio y correo corporativo."
-      - "Sitio en producción sobre Next.js con export estático en Cloudflare Pages, con DNS, SPF, DKIM y DMARC configurados y verificados."
-    stack: ["Next.js", "Tailwind", "Cloudflare Pages", "Zoho Mail"]
+      - "Entrené y comparé BERT, RoBERTa y DeBERTa con fine-tuning completo en PyTorch sobre el corpus clínico DAIC-WOZ de transcripciones de entrevistas etiquetadas con el instrumento PHQ-8, descomponiendo cada entrevista en pares pregunta-respuesta por el límite de longitud de secuencia."
+      - "Hice búsqueda de hiperparámetros y un protocolo de 10 corridas reportando media y desviación estándar en vez de resultados de una sola corrida. Ganó BERT con F1 de 0.7744 y recall de 0.88; prioricé recall a propósito, porque en tamizaje clínico un falso negativo cuesta más que un falso positivo."
+      - "Desplegué el mejor modelo como API de inferencia en Amazon SageMaker."
+      - "Publiqué el trabajo en Computación y Sistemas, revista arbitrada, Vol. 29 No. 3, 2025, con sección explícita de metodología y limitaciones."
+    stack: ["PyTorch", "Hugging Face", "BERT", "RoBERTa", "DeBERTa", "Amazon SageMaker", "Python"]
 
 proyectos:
+  # Trabajo realizado dentro de Grupo Dalton. Se listan aparte para poder
+  # detallar la arquitectura sin inflar la historia laboral.
+  - id: "proy-agentes-whatsapp"
+    nombre: "Suite de agentes conversacionales sobre WhatsApp Business API"
+    resumen: >
+      Cuatro agentes con tráfico real de clientes que no solo responden: ejecutan
+      acciones contra los sistemas del negocio.
+    detalle: >
+      Arquitectura single-agent de tool calling sobre n8n autohospedado en
+      Kubernetes, con Claude vía la API de Anthropic desplegada en Azure AI
+      Foundry. Gestión de contexto y memoria en tres capas para conversaciones de
+      varios días, con presupuesto explícito de ventana de contexto. Persistencia
+      heterogénea por agente sobre Azure Database for PostgreSQL, Azure Cosmos DB
+      y Firestore, con Redis en los cuatro para control de concurrencia por
+      conversación. El criterio de diseño central fue sacar del modelo toda
+      decisión que debe ser exacta y dejarla en nodos deterministas, y dejarle al
+      modelo la comprensión del lenguaje y la conducción de la conversación.
+    stack: ["Claude vía API de Anthropic sobre Azure AI Foundry", "n8n", "Kubernetes", "WhatsApp Business API", "PostgreSQL", "Azure Cosmos DB", "Firestore", "Redis"]
+
+  - id: "proy-plataformas-supervision"
+    nombre: "Plataformas web de supervisión y control de agentes"
+    resumen: >
+      Mini CRMs internos por línea de negocio, en producción con usuarios reales,
+      que le dan a una persona el control sobre lo que el agente hace: revisar,
+      validar, aprobar y corregir antes de que la salida tenga efecto.
+    detalle: >
+      Son la capa de human-in-the-loop de la operación de agentes. Cada
+      plataforma expone la cola de lo que el agente produjo, con revisión,
+      aprobación, corrección y trazabilidad de quién aprobó qué y cuándo, de modo
+      que cada decisión del sistema queda auditable por una persona del negocio y
+      no sólo por logs de ingeniería. El criterio de diseño es el mismo que rige
+      toda la arquitectura: el modelo produce un borrador, la persona decide.
+      Construidas sobre Next.js y Firebase, con RBAC y matriz de permisos por
+      módulo y despliegue a producción bajo verificación previa a cada paso
+      irreversible. Soy responsable de toda la infraestructura: n8n, secretos,
+      webhooks, IAM y configuración en entornos separados de desarrollo y
+      producción, con flujo de ramas y despliegue automático por merge.
+    stack: ["Next.js", "TypeScript", "Firebase (Firestore, Auth, App Hosting)", "n8n", "Google Secret Manager"]
+    repo: ""
+
+  - id: "proy-motor-financiero"
+    nombre: "Motor determinista de cálculo financiero"
+    resumen: >
+      Software financiero en producción, deliberadamente basado en reglas y no en
+      modelo, por requerimiento de reproducibilidad y auditoría.
+    detalle: >
+      Máquina de estados finita determinista sobre Cloud Functions: cálculo
+      periódico de intereses con convención bancaria de base 360 e historial
+      auditable, sincronización con ERP, disparadores de pago y generación de
+      documentos firmados digitalmente, sobre PostgreSQL y SQL Server. Toma tasa
+      de referencia desde la API pública de Banxico y respeta calendario de días
+      hábiles. La lección de arquitectura fue que cualquier cálculo financiero
+      necesita una auditoría que compare el agregado contra una fuente externa, no
+      sólo pruebas unitarias sobre el caso feliz.
+    stack: ["Firebase Cloud Functions", "Firestore", "TypeScript", "PostgreSQL", "SQL Server", "n8n", "API de Banxico"]
+    repo: ""
+
+  - id: "proy-saas-flotillas"
+    nombre: "SaaS multi-tenant de administración de flotillas"
+    resumen: >
+      Plataforma multi-tenant con aislamiento por tenant y RBAC jerárquico.
+    detalle: >
+      Arquitectura multi-tenant con aislamiento por middleware de contexto de
+      tenant. RBAC jerárquico con perfiles de visibilidad a nivel campo, roles en
+      árbol y matriz de permisos por módulo y acción. Construido sobre Next.js
+      con App Router, TypeScript en modo estricto y validación de esquemas con
+      Zod.
+    stack: ["Next.js (App Router)", "TypeScript", "Firebase", "Cloud Functions", "Zod", "Tailwind", "Radix UI"]
+    repo: ""
+
+  - id: "proy-migracion-web"
+    nombre: "Migración de sitio público de Angular 9 a Next.js 15"
+    resumen: >
+      Migración de un sitio con SSR a Next.js 15 con App Router, conectando APIs
+      reales de backend .NET a través de una capa de gestión de APIs.
+    detalle: >
+      PageSpeed subió de 34 a 96 y el LCP bajó de 8.3 s a 2.5 s. Establecí un
+      patrón BFF donde el navegador sólo llama route handlers internos y las API
+      keys viven exclusivamente del lado servidor, con verificación automatizada
+      de que ninguna llave se filtre al bundle, más un check de SEO en CI que
+      corre en cada pull request que toca la aplicación.
+    stack: ["Next.js 15", "TypeScript", "Azure APIM", ".NET (consumo de APIs)", "Cosmos DB"]
+    repo: ""
+
   - id: "proy-cv-agent"
     nombre: "Agente de CV (este mismo agente)"
     resumen: >
-      Servidor propio compatible con la especificación Open Responses que
-      expone este CV como agente conversacional, con herramientas, guardarraíles
-      y suite de evaluación automatizada.
+      Servidor propio compatible con la especificación Open Responses que expone
+      este perfil como agente conversacional.
     detalle: >
       Implementa POST /v1/responses en modo síncrono y streaming SSE, ejecuta un
       agent loop con herramientas server-side sobre el perfil, cede control al
       cliente cuando este declara sus propias function tools, y corre una batería
-      de evals de fundamentación (groundedness) en CI antes de cada despliegue.
-    stack: ["Python", "FastAPI", "SSE", "Docker", "Cloud Run", "GitHub Actions"]
-    repo: ""   # VERIFICA: pega la URL del repo público
-
-  - id: "proy-bot-ventas"
-    nombre: "Bot de ventas conversacional en WhatsApp"
-    resumen: >
-      Sistema multiagente que atiende leads entrantes de venta de autos de punta
-      a punta, desde el primer mensaje hasta la cita agendada en el CRM.
-    detalle: >
-      Arquitectura de agente orquestador con subagentes especializados
-      (búsqueda de inventario, valuación, agendamiento). El aprendizaje central
-      fue mover toda decisión que debe ser exacta (horarios, precios,
-      disponibilidad) fuera del LLM hacia nodos deterministas, dejando al modelo
-      la comprensión del lenguaje y la conducción de la conversación.
-    stack: ["n8n", "Azure OpenAI", "LangChain", "SQL Server", "Dynamics 365"]
+      de evals de fundamentación en CI antes de cada despliegue. En construcción.
+    stack: ["Python", "FastAPI", "SSE", "Docker", "Azure Container Apps", "GitHub Actions"]
+    repo: "https://github.com/AlejandroAld/cv-agent"
 
   - id: "proy-cotizador"
-    nombre: "Cotizador de valuación vehicular"
+    nombre: "Flujo de valuación vehicular"
     resumen: >
-      Flujo de valuación que le da a un vendedor particular un rango de precio
-      para su auto y lo convierte en cita de compra.
+      Agente de compra y valuación dentro de la suite conversacional: entrega a
+      un vendedor particular un rango de precio para su auto y convierte la
+      conversación en una cita.
     detalle: >
-      Incluyó ingeniería inversa de la fórmula de valuación existente para poder
-      reimplementarla y corregir un desfase por kilometraje que estaba
-      produciendo cotizaciones equivocadas en producción.
-    stack: ["n8n", "Azure OpenAI", "PostgreSQL", "Next.js"]
+      El cálculo de valuación vive fuera del modelo, en lógica determinista, por
+      la misma razón que el resto de los cálculos exactos del sistema: un rango
+      de precio equivocado es un problema de negocio, no un detalle de
+      conversación.
+    stack: ["n8n", "PostgreSQL", "Next.js"]
 
 habilidades:
-  - categoria: "IA aplicada y agentes"
-    items: ["Diseño de sistemas multiagente", "Function calling y orquestación de herramientas", "Ingeniería de contexto y de prompts", "RAG y cuándo NO usarlo", "Evaluación y guardarraíles", "Azure OpenAI", "LangChain", "MCP (Model Context Protocol)"]
+  - categoria: "IA generativa y agentes"
+    items: ["Diseño de sistemas agénticos y orquestación de herramientas", "Contratos de tool / function calling", "Gestión de contexto y memoria multi-sesión", "Presupuesto de ventana de contexto", "Enrutamiento por máquina de estados", "Escalamiento a humano", "Agentes revisores y patrones de supervisión", "MCP (Model Context Protocol)", "Arquitecturas RAG", "Bases de datos vectoriales", "Prompt engineering (chain-of-thought, few-shot, salida estructurada con JSON Schema)", "LangGraph", "LangChain", "Google Genkit", "n8n autohospedado en Kubernetes"]
+  - categoria: "Evaluación, guardarraíles y observabilidad"
+    items: ["Evaluación automatizada de sistemas no deterministas", "Datasets de evaluación anclados en fallas de producción", "Pruebas de regresión de prompts y herramientas", "Métricas de groundedness y corrección factual", "Precisión de selección de herramienta", "LangSmith", "Medición de calidad, costo y latencia por interacción", "Guardarraíles anti-alucinación y validación de salida", "Interfaces de supervisión humana (human-in-the-loop) para revisión, aprobación y corrección de salidas de agentes", "Selección de modelo y análisis de trade-offs", "Fundamentos de OWASP LLM Top 10"]
+  - categoria: "Machine learning"
+    items: ["Modelos Transformer", "Fine-tuning completo", "Clasificación supervisada", "NLP y analítica de texto", "Diseño experimental y reporte de métricas multi-corrida", "Despliegue de modelos como API de inferencia", "PyTorch", "TensorFlow", "Hugging Face", "scikit-learn", "pandas", "NumPy"]
+  - categoria: "APIs de modelos"
+    items: ["Claude / API de Anthropic", "Azure OpenAI", "OpenAI API", "Gemini", "Modelos open source"]
   - categoria: "Automatización e integración"
-    items: ["n8n autohospedado", "Diseño de webhooks e idempotencia", "Microsoft Graph API", "Evolution API (WhatsApp)", "Integración con CRM (Dynamics 365)"]
+    items: ["n8n autohospedado", "Diseño de webhooks e idempotencia", "APIs REST", "OAuth 2.0 / JWT", "Microsoft Dynamics 365 y Dataverse", "Integración con ERP y CRM", "WhatsApp Business API", "Power Automate", "Power Apps"]
   - categoria: "Backend y datos"
-    items: ["Python", "TypeScript", "Node.js", "PostgreSQL", "SQL Server", "Firestore", "Redis", "Diseño de esquemas y stored procedures"]
+    items: ["Python (tipado, async/await, pruebas, depuración)", "SQL avanzado", "TypeScript", "Node.js", "JavaScript", "C++", "R", "FastAPI", "PostgreSQL", "SQL Server", "Azure Cosmos DB", "Firestore", "BigQuery", "Redis", "Procesos ETL", "Cortes sin downtime con blue/green view swap"]
   - categoria: "Frontend"
-    items: ["Next.js (App Router)", "React", "Tailwind CSS", "Radix UI", "Zod"]
+    items: ["Next.js (App Router)", "React", "Tailwind CSS", "Radix UI", "Zod", "TypeScript en modo estricto"]
   - categoria: "Infraestructura y operación"
-    items: ["Docker", "Google Cloud Run", "Firebase (Hosting, Functions, Auth)", "Cloudflare Pages", "Azure APIM", "Secret Manager", "GitHub Actions", "RBAC e IAM"]
+    items: ["Docker", "Kubernetes", "CI/CD", "Git y revisión de código", "Microsoft Azure (AI Foundry, Azure OpenAI, AI Services, Document Intelligence, Entra ID)", "GCP (Cloud Run, Cloud Functions, Cloud Storage, BigQuery, Firebase)", "AWS (SageMaker)", "Oracle Cloud (OCI)", "Azure APIM", "Google Secret Manager", "RBAC e IAM", "Aislamiento por tenant", "Desarrollo asistido con Claude Code"]
   - categoria: "Dominio"
-    items: ["Retail automotriz", "Financiamiento de inventario (plan piso)", "Convenciones financieras mexicanas: TIIE, IVA, CFDI, base 360"]
+    items: ["Sector automotriz", "Automatización de procesos financieros con máquinas de estado deterministas", "Cálculo de intereses con convención bancaria base 360 e historial auditable", "Consumo de tasas de referencia desde la API de Banxico"]
 
 educacion:
-  - titulo: ""        # VERIFICA: llénalo o borra la sección completa
-    institucion: ""
-    periodo: ""
+  - titulo: "Ingeniería en Inteligencia Artificial"
+    institucion: "Instituto Politécnico Nacional (IPN)"
+    periodo: "2021-02 a 2025-01. Promedio 9.31 / 10.0"
 
-certificaciones: []   # VERIFICA: agrega las que tengas, o deja la lista vacía
+publicaciones:
+  - titulo: "Detection of Tendency to Depression through Text Analysis"
+    medio: "Computación y Sistemas, revista arbitrada, Vol. 29 No. 3, 2025"
+    url: "https://www.cys.cic.ipn.mx/ojs/index.php/CyS/article/view/5887"
+    idioma: "Inglés"
+
+certificaciones:
+  - nombre: "Microsoft AI-103, Azure AI Apps and Agents Developer Associate"
+    estado: "En curso"
+  - nombre: "Anthropic Claude Certified Architect"
+    estado: "En curso"
+  - nombre: "Google Professional Machine Learning Engineer"
+    estado: "En curso"
 
 # Preguntas frecuentes que el agente responde con texto fijo, sin inventar.
 faq:
   - pregunta: "¿Qué tipo de rol te interesa?"
     respuesta: >
       Roles donde la IA tenga que operar sobre sistemas que ya existen, con datos
-      reales y consecuencias reales, no pilotos aislados. Me interesa
-      especialmente el tramo de piloto a producción, que es donde la mayoría de
-      los proyectos de IA se detienen, y es justo el tramo en el que he trabajado
-      los últimos años.
+      reales y consecuencias reales. Me interesa el tramo de piloto a producción,
+      que es donde la mayoría de los proyectos se detiene, y es justo donde he
+      trabajado: no sólo construir el agente, sino sostenerlo cuando ya tiene
+      tráfico, con evaluación, trazabilidad y control de costo.
   - pregunta: "¿Cuál es tu expectativa salarial?"
     respuesta: >
       Ese punto prefiero conversarlo directamente con el equipo de reclutamiento,
       no a través de este agente.
   - pregunta: "¿Cuál ha sido tu error técnico más caro y qué aprendiste?"
     respuesta: >
-      Una deriva de intereses en una plataforma financiera: un incremento atómico
-      se aplicaba sobre un saldo que un batch nocturno ya había puesto en cero.
-      El bug era invisible por unidad y sólo aparecía al auditar el agregado.
-      Desde entonces cualquier cálculo financiero que escribo lleva una auditoría
-      que compara el agregado contra una fuente externa, no sólo pruebas
-      unitarias sobre el caso feliz.
+      Mi publicación arbitrada tiene tres debilidades metodológicas que identifiqué
+      después y documenté en la sección de limitaciones. Hice el sobremuestreo
+      antes del split, así que hay fuga de datos entre entrenamiento y prueba.
+      Particioné por par pregunta-respuesta y no por participante, así que hay fuga
+      por grupo. Y evalué a nivel turno en vez de a nivel paciente, que es la unidad
+      clínica que de verdad importa. El F1 de 0.7744 hay que leerlo con eso encima.
+      Lo que me dejó es que la validación se diseña antes del experimento, no
+      después, y que un número que no puedes defender es peor que no tener número.
+      Por eso hoy, cuando evalúo sistemas generativos, la suite se ancla en modos
+      de falla reales de producción y no en casos sintéticos que yo mismo inventé.
+  - pregunta: "¿Qué no sabes hacer?"
+    respuesta: >
+      Varias cosas, y prefiero decirlas antes de que salgan. No he escrito .NET ni
+      C#, ni Rust. No he usado PySpark, Databricks ni Airflow; mi cómputo
+      distribuido ha sido con BigQuery. No he construido agentes de voz, todo mi
+      trabajo conversacional ha sido en texto. Y no he hecho un ejercicio formal
+      de red team contra mis propios agentes, que es una brecha que tengo clara.
+  - pregunta: "¿Cómo se supervisa lo que hacen tus agentes?"
+    respuesta: >
+      Con tres capas, y la tercera es la que casi nadie construye. La primera es
+      técnica: validación de salida que bloquea respuestas no sustentadas en el
+      resultado de una herramienta, más agentes revisores que auditan antes de
+      que la respuesta llegue al cliente. La segunda es de ingeniería: trazado de
+      cada llamada y una suite de evaluación que corre ante cada cambio. La
+      tercera es humana: construí las plataformas web donde una persona del
+      negocio revisa, valida, aprueba y corrige lo que el agente produce. Son
+      mini CRMs por línea de negocio. Sin esa capa un agente puede funcionar,
+      pero nadie fuera de ingeniería puede responder por él.
+  - pregunta: "¿Puedes darme detalles del negocio donde trabajas?"
+    respuesta: >
+      Puedo hablar de arquitectura, decisiones técnicas y de cómo resolví los
+      problemas, pero no de clientes, marcas socias, cifras de negocio ni nombres
+      de sistemas internos. Eso es información de mi empleador. Con gusto entro en
+      el detalle técnico que necesites.
