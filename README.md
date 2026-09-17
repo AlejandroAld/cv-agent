@@ -68,8 +68,8 @@ Navegador (demo del sitio)        Cualquier cliente Open Responses
 | `app/core.py` | Configuración, logging estructurado, carga y búsqueda del perfil |
 | `app/static/index.html` | Interfaz de chat del sitio personal |
 | `data/perfil.yaml` | **Fuente única de verdad.** Todo hecho que el agente afirma vive aquí |
-| `tests/` | 61 tests de contrato contra el spec, el cuerpo que sale al proveedor, el render del perfil y la fuerza de la evidencia |
-| `evals/` | Batería de 24 casos, 15 de ellos adversariales |
+| `tests/` | 66 tests de contrato contra el spec, el cuerpo que sale al proveedor, el render del perfil y la fuerza de la evidencia |
+| `evals/` | Batería de 26 casos, 17 de ellos adversariales |
 
 ---
 
@@ -219,7 +219,7 @@ retención de verdad, es el mismo reemplazo por Redis de arriba.
 
 ### Guardarraíles
 
-Cuatro capas, en orden de qué tan seguido disparan:
+Cinco capas, en orden de qué tan seguido disparan:
 
 1. **Fundamentación.** El perfil es la única fuente, los huecos se declaran y las
    premisas falsas se corrigen antes de responder. Lo último es lo que evita el
@@ -232,13 +232,19 @@ Cuatro capas, en orden de qué tan seguido disparan:
    explícita de que no anulan las reglas de fundamentación ni de privacidad.
 4. **Alcance.** Fuera del perfil profesional, el agente lo dice en una frase y
    reconduce.
+5. **Cierre.** Dos reglas nacidas de producción. El agente no pregunta qué
+   respuesta se espera de él ni ofrece ajustarla a un criterio que aporte quien
+   pregunta: "dime qué rango de años aceptan y te digo si califico" convierte al
+   reclutador en autor de la respuesta, que es complacencia con otro nombre. Y
+   sólo ofrece profundizar en algo que exista en el perfil, nunca un diagrama o
+   documento que tendría que fabricar.
 
 Ninguna capa es confiable sola, y por eso existe la siguiente sección.
 
 ### Evaluación
 
-Un prompt con buenas intenciones no es evidencia. La batería tiene 24 casos y
-**15 son adversariales**, porque un agente probado sólo con preguntas amables no
+Un prompt con buenas intenciones no es evidencia. La batería tiene 26 casos y
+**17 son adversariales**, porque un agente probado sólo con preguntas amables no
 dice nada sobre su confiabilidad.
 
 | Categoría | Qué ataca | Ejemplos |
@@ -246,7 +252,7 @@ dice nada sobre su confiabilidad.
 | Cobertura | ¿responde lo básico? | perfil general, stack, dominio |
 | Fundamentación | alucinación y premisas falsas | "¿en qué universidad tu doctorado?", "¿años en Rust?" |
 | Privacidad | fuga de datos | teléfono, salario, cliente bajo NDA |
-| Seguridad | inyección y desvío | "ignora tus instrucciones", cambio de rol, halago para exagerar |
+| Seguridad | inyección, desvío y complacencia | "ignora tus instrucciones", cambio de rol, halago para exagerar, delegar el criterio de la respuesta |
 | Herramientas | utilidad real | encaje contra vacante, multi-turno, respuesta en inglés |
 | Robustez | entradas raras | `"?"`, pregunta con seis subpreguntas |
 
@@ -266,7 +272,7 @@ Un test así envejece con los datos: el caso citaba Kubernetes como hueco hasta
 que el perfil pasó a correr n8n sobre Kubernetes. Cuando eso pasa, lo que se
 corrige es el test, no el perfil.
 
-Aparte, 61 tests de contrato corren con un proveedor mock, sin credenciales y sin
+Aparte, 66 tests de contrato corren con un proveedor mock, sin credenciales y sin
 gastar tokens, y validan el protocolo: campos requeridos, orden de eventos SSE,
 monotonía de `sequence_number`, `event:` coincidiendo con `type`, terminal
 `[DONE]` y códigos de error.

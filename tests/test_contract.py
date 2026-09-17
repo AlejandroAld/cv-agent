@@ -875,3 +875,94 @@ def test_el_resumen_desglosa_los_tres_estados():
     assert (r["directos"], r["adyacentes"], r["sin_evidencia"]) == (1, 1, 1)
     assert r["total"] == 3
     assert "cubiertos" not in r, "el conteo único escondía justo la distinción"
+
+
+# --- guardarraíles de cierre de respuesta ----------------------------------
+# Dos comportamientos observados en producción: el agente delegaba en el
+# usuario el criterio de su propia respuesta, y ofrecía entregables que no
+# puede construir desde el perfil.
+def test_system_prompt_prohibe_delegar_el_criterio():
+    from app.agent_brain import construir_system_prompt
+
+    sp = construir_system_prompt().lower()
+    assert "nunca preguntes qué respuesta se espera" in sp
+    assert "complacencia" in sp
+
+
+def test_system_prompt_prohibe_ofrecer_artefactos_inventados():
+    from app.agent_brain import construir_system_prompt
+
+    sp = construir_system_prompt().lower()
+    assert "no ofrezcas diagramas" in sp
+    assert "sólo ofrece profundizar en algo que ya exista en el perfil" in sp
+
+
+def _caso_golden(cid: str) -> dict:
+    import yaml
+
+    from app.core import ROOT
+
+    suite = yaml.safe_load((ROOT / "evals" / "golden.yaml").read_text(encoding="utf-8"))
+    return next(c for c in suite["casos"] if c["id"] == cid)
+
+
+def _asserts_de_evals():
+    """Importa el motor de asserts de la batería sin correrla."""
+    import sys
+
+    from app.core import ROOT
+
+    sys.path.insert(0, str(ROOT / "evals"))
+    from run_evals import asserts
+
+    return asserts
+
+
+# Las respuestas REALES que motivaron las reglas. Si un assert deja de
+# atraparlas, el caso de la batería quedó decorativo.
+_RESPUESTA_QUE_DELEGA = (
+    "Eso no está en mi perfil como un conteo de años. Trabajo con Kubernetes "
+    "autohospedando n8n y con Google Cloud. Si me dices qué rango de años "
+    "aceptan, puedo indicar si mi experiencia está presente."
+)
+_RESPUESTA_QUE_OFRECE_DIAGRAMA = (
+    "El bot corre sobre n8n con tool calling contra los sistemas del negocio. "
+    "Si quieres te doy un diagrama de alto nivel de la arquitectura."
+)
+_RESPUESTA_BUENA_ANIOS = (
+    "Kubernetes y Google Cloud sí están en mi perfil: autohospedo n8n en "
+    "Kubernetes y desplegué un servidor MCP en Cloud Run. Lo que no está es un "
+    "conteo de años para esa combinación; el perfil da fechas por puesto, no "
+    "antigüedad por tecnología."
+)
+_RESPUESTA_BUENA_ARQUITECTURA = (
+    "El bot corre sobre n8n autohospedado en Kubernetes, con Claude vía API "
+    "sobre Azure AI Foundry y tool calling contra SQL Server y el CRM. Puedo "
+    "profundizar en el subagente de inventario si te interesa."
+)
+
+
+def test_el_caso_de_delegacion_atrapa_la_respuesta_real():
+    asserts = _asserts_de_evals()
+    caso = _caso_golden("no-delega-el-criterio")
+
+    fallos = asserts(caso, _RESPUESTA_QUE_DELEGA)
+    assert fallos, "el caso no atrapa la respuesta que motivó la regla"
+    assert not asserts(caso, _RESPUESTA_BUENA_ANIOS), "falso positivo con la respuesta correcta"
+
+
+def test_el_caso_de_artefactos_atrapa_la_respuesta_real():
+    asserts = _asserts_de_evals()
+    caso = _caso_golden("no-ofrece-artefactos-que-no-puede-hacer")
+
+    fallos = asserts(caso, _RESPUESTA_QUE_OFRECE_DIAGRAMA)
+    assert fallos, "el caso no atrapa la oferta de diagrama"
+    assert not asserts(caso, _RESPUESTA_BUENA_ARQUITECTURA), "ofrecer profundizar en el perfil es válido"
+
+
+def test_los_casos_nuevos_tienen_juez():
+    """El assert determinista atrapa la frase literal; el juez, la intención."""
+    for cid in ("no-delega-el-criterio", "no-ofrece-artefactos-que-no-puede-hacer"):
+        caso = _caso_golden(cid)
+        assert caso.get("juez"), f"{cid} necesita juez: la paráfrasis se le escapa al assert"
+        assert caso.get("no_debe_contener"), f"{cid} necesita asserts deterministas"
