@@ -260,6 +260,31 @@ def test_agent_card(cli):
     assert len(card["skills"]) >= 1
 
 
+def test_agent_card_declara_la_interfaz_en_una_sola_version_de_a2a(cli):
+    """La tarjeta decía protocolVersion 0.3.0 y usaba supportedInterfaces, que
+    es de v1.0. Ningún parser veía una interfaz completa."""
+    card = cli.get("/.well-known/agent-card.json").json()
+
+    assert card["protocolVersion"] == "1.0"
+    iface = card["supportedInterfaces"][0]
+    assert set(iface) >= {"url", "protocolBinding", "protocolVersion"}
+    # El protocolVersion de la interfaz es la versión de A2A, no la fecha del
+    # spec de Open Responses.
+    assert iface["protocolVersion"] == "1.0"
+    assert iface["url"] == card["url"], "la interfaz preferida y url deben coincidir"
+
+
+def test_agent_card_usa_una_uri_como_binding_propio(cli):
+    """A2A registra JSONRPC, GRPC y HTTP+JSON. Un binding propio va como URI,
+    para no chocar con valores futuros del núcleo."""
+    card = cli.get("/.well-known/agent-card.json").json()
+
+    binding = card["supportedInterfaces"][0]["protocolBinding"]
+    assert binding.startswith("https://"), f"binding no es URI: {binding!r}"
+    assert card["preferredTransport"] == binding, "v0.3 y v1.0 deben coincidir"
+    assert card["additionalInterfaces"][0]["transport"] == binding
+
+
 # --- herramientas internas -------------------------------------------------
 def test_herramientas_internas_no_alucinan():
     """Kubernetes ya NO sirve como ejemplo de hueco: el perfil lo cubre.

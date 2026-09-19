@@ -68,7 +68,7 @@ Navegador (demo del sitio)        Cualquier cliente Open Responses
 | `app/core.py` | Configuración, logging estructurado, carga y búsqueda del perfil |
 | `app/static/index.html` | Interfaz de chat del sitio personal |
 | `data/perfil.yaml` | **Fuente única de verdad.** Todo hecho que el agente afirma vive aquí |
-| `tests/` | 66 tests de contrato contra el spec, el cuerpo que sale al proveedor, el render del perfil y la fuerza de la evidencia |
+| `tests/` | 68 tests de contrato contra el spec, el cuerpo que sale al proveedor, el render del perfil y la fuerza de la evidencia |
 | `evals/` | Batería de 26 casos, 17 de ellos adversariales |
 
 ---
@@ -272,7 +272,7 @@ Un test así envejece con los datos: el caso citaba Kubernetes como hueco hasta
 que el perfil pasó a correr n8n sobre Kubernetes. Cuando eso pasa, lo que se
 corrige es el test, no el perfil.
 
-Aparte, 66 tests de contrato corren con un proveedor mock, sin credenciales y sin
+Aparte, 68 tests de contrato corren con un proveedor mock, sin credenciales y sin
 gastar tokens, y validan el protocolo: campos requeridos, orden de eventos SSE,
 monotonía de `sequence_number`, `event:` coincidiendo con `type`, terminal
 `[DONE]` y códigos de error.
@@ -319,6 +319,11 @@ Python 3.12 con las dependencias, `az` y el proveedor mock ya configurado.
 
 ## Desplegar
 
+La imagen se compila y publica sola: cada push a `main` dispara
+`.github/workflows/imagen.yml`, que corre los tests de contrato y publica en
+`ghcr.io/alejandroald/cv-agent` con dos etiquetas, el SHA del commit y `latest`.
+Usa el `GITHUB_TOKEN` integrado con `packages: write`, no un PAT.
+
 ```bash
 export AZURE_OPENAI_ENDPOINT="https://<recurso>.openai.azure.com/openai/v1"
 export AZURE_OPENAI_API_KEY="..."
@@ -327,7 +332,64 @@ export AGENT_API_KEY="$(openssl rand -hex 24)"
 ./scripts/deploy_azure.sh
 ```
 
-Hay también `scripts/deploy_cloudrun.sh` para Google Cloud Run.
+El script despliega desde la imagen ya publicada. **No compila en Azure**, y esa
+es la diferencia que importa.
+
+### Por qué no se compila en Azure
+
+`az containerapp up --source .` compila dentro de Azure, y para eso crea un
+Azure Container Registry. Un ACR Basic cuesta unos 5 USD al mes: era el único
+costo fijo del proyecto, y existía sólo para hospedar la imagen de un repo
+público. GitHub Container Registry es gratis para repos públicos y el paquete
+queda junto al código que lo produce.
+
+Con el paquete público, el pull **no necesita credenciales**. Eso hace sobrar
+dos cosas que antes eran obligatorias:
+
+- La entrada de `registries` del Container App que apuntaba al ACR, con la
+  identidad administrada asignada por el sistema. Hay que quitarla: si se queda,
+  el Container App sigue intentando autenticarse contra un registro que va a
+  desaparecer.
+- El proveedor `Microsoft.ContainerRegistry`. El script ya no lo registra,
+  porque nada compila ni hospeda imágenes en Azure. (Su ausencia es lo que hacía
+  fallar el primer despliegue con `--source .`.)
+
+### Hacer público el paquete (una sola vez)
+
+**Un paquete nuevo en GHCR nace privado**, aunque el repo sea público. Mientras
+lo siga siendo, el pull anónimo falla y el Container App no puede arrancar. Tras
+la primera publicación, en `github.com/AlejandroAld/cv-agent` → *Packages* →
+`cv-agent` → *Package settings* → *Danger Zone* → *Change visibility* → *Public*.
+
+Es un cambio de una sola dirección: un paquete público no se puede volver a
+privado.
+
+### Apuntar el Container App a ghcr.io
+
+Una vez que el workflow publicó la imagen **y el paquete ya es público**:
+
+```bash
+# 1. Quitar el registro privado. Sin esto, el pull anónimo no se intenta.
+az containerapp registry remove \
+  -n cv-agent -g rg-cv-agent \
+  --server cae81cfd1e57acr.azurecr.io
+
+# 2. Apuntar a la imagen pública. Usa el SHA, no latest: es inmutable y
+#    permite volver atrás sin adivinar qué había desplegado.
+az containerapp update \
+  -n cv-agent -g rg-cv-agent \
+  --image ghcr.io/alejandroald/cv-agent:<sha>
+
+# 3. Comprobar que la revisión nueva quedó sana antes de borrar nada.
+az containerapp revision list -n cv-agent -g rg-cv-agent \
+  -o table --query "[].{rev:name, activa:properties.active, estado:properties.runningState}"
+```
+
+Sólo cuando la revisión nueva corre sana se borra el ACR. Borrarlo antes deja al
+Container App sin de dónde sacar la imagen si hay que revertir.
+
+Hay también `scripts/deploy_cloudrun.sh` para Google Cloud Run, que sí compila
+con Cloud Build: ahí no hay registro que pagar aparte.
 
 ## Incrustar en un sitio
 
