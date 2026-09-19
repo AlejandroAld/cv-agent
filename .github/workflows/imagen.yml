@@ -1,0 +1,90 @@
+name: Imagen
+
+# Publica la imagen en GitHub Container Registry, que es gratis para repos
+# públicos. Antes se compilaba en Azure con `az containerapp up --source .`,
+# que creaba un Azure Container Registry Basic: el único costo fijo del
+# proyecto (~5 USD/mes) sólo por hospedar una imagen de un repo público.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  # ghcr.io exige el nombre en minúsculas; github.repository respeta la
+  # capitalización del owner, así que no se usa directamente.
+  IMAGE: ghcr.io/alejandroald/cv-agent
+
+jobs:
+  publicar:
+    name: Compilar y publicar en ghcr.io
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Los tests son baratos y no necesitan credenciales. Publicar una imagen
+      # que no pasa el contrato es publicar basura con un tag bonito.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Tests de contrato antes de publicar
+        env:
+          LLM_PROVIDER: mock
+          AGENT_API_KEY: test-key
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+          pytest tests/ -q
+
+      - uses: docker/setup-buildx-action@v3
+
+      # El GITHUB_TOKEN integrado basta con packages:write. Sin PAT: un PAT
+      # caduca, hay que rotarlo y vive fuera del repo.
+      - name: Login en ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compilar y publicar
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # El SHA es el tag inmutable para desplegar y poder volver atrás;
+          # latest es la comodidad para leer.
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Resumen
+        run: |
+          {
+            echo "### Imagen publicada"
+            echo
+            echo '```'
+            echo "${{ env.IMAGE }}:${{ github.sha }}"
+            echo "${{ env.IMAGE }}:latest"
+            echo '```'
+            echo
+            echo "Para apuntar el Container App a este build:"
+            echo
+            echo '```bash'
+            echo "az containerapp update -n cv-agent -g rg-cv-agent \\"
+            echo "  --image ${{ env.IMAGE }}:${{ github.sha }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

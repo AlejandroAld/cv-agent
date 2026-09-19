@@ -32,6 +32,16 @@ from .agent_brain import (
 from .core import ROOT, get_profile, get_settings, log_event
 from .llm import LLMError, stream_agente
 
+# A2A registra tres bindings: JSONRPC, GRPC y HTTP+JSON. Open Responses no es
+# ninguno, y el spec pide que un binding propio se identifique con una URI,
+# precisamente para no chocar con valores futuros del núcleo. Antes aquí iba el
+# token suelto "open-responses", que no es ni un valor registrado ni una URI.
+#
+# PENDIENTE DE CONFIRMAR: si openresponses.org publica una URI canónica para su
+# binding, esa gana sobre esta. No se pudo verificar desde el entorno donde se
+# escribió este cambio.
+BINDING_OPEN_RESPONSES = "https://www.openresponses.org/specification"
+
 app = FastAPI(title="Agente de CV — Open Responses", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
@@ -537,16 +547,35 @@ async def agent_card():
     p = get_profile()
     base = s.public_base_url.rstrip("/")
     return {
-        "protocolVersion": "0.3.0",
+        # A2A v1.0. La tarjeta declaraba "0.3.0" y a la vez usaba
+        # `supportedInterfaces`, que es un campo de v1.0: un lector de v0.3
+        # busca `additionalInterfaces` y no encuentra nada, y uno de v1.0 ve
+        # una versión que no corresponde al esquema. Ningún parser veía una
+        # interfaz completa, que es justo lo que reportó la plataforma.
+        "protocolVersion": "1.0",
         "name": f"CV de {p.nombre}",
         "description": f"Agente conversacional sobre la trayectoria profesional de {p.nombre}: experiencia, habilidades y proyectos.",
         "version": "1.0.0",
-        "url": base,
-        "openResponsesUrl": base,
-        "preferredTransport": "open-responses",
+        # v1.0 consolidó url + preferredTransport + additionalInterfaces en
+        # `supportedInterfaces`, ordenado: la primera entrada es la preferida y
+        # cada una lleva url, protocolBinding y protocolVersion. Ese
+        # protocolVersion es la versión DE A2A, no la del spec de Open
+        # Responses: antes decía "2026-04-24", que es una fecha del otro spec.
         "supportedInterfaces": [
-            {"url": base, "protocolBinding": "open-responses", "protocolVersion": "2026-04-24"}
+            {
+                "url": base,
+                "protocolBinding": BINDING_OPEN_RESPONSES,
+                "protocolVersion": "1.0",
+            }
         ],
+        # Compatibilidad con lectores de A2A v0.3, que no conocen
+        # `supportedInterfaces`. Cuestan tres campos y evitan que un cliente
+        # de la generación anterior se quede sin URL.
+        "url": base,
+        "preferredTransport": BINDING_OPEN_RESPONSES,
+        "additionalInterfaces": [{"url": base, "transport": BINDING_OPEN_RESPONSES}],
+        # Fuera del esquema A2A, por si algún cliente la lee directo.
+        "openResponsesUrl": base,
         "provider": {"organization": p.nombre, "url": (p.persona.get("contacto") or {}).get("linkedin") or base},
         "contact": {k: v for k, v in (p.persona.get("contacto") or {}).items() if v and k in ("email", "linkedin")},
         "repositoryUrl": (p.persona.get("contacto") or {}).get("github") or "",

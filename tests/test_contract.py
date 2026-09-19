@@ -260,6 +260,31 @@ def test_agent_card(cli):
     assert len(card["skills"]) >= 1
 
 
+def test_agent_card_declara_la_interfaz_en_una_sola_version_de_a2a(cli):
+    """La tarjeta decía protocolVersion 0.3.0 y usaba supportedInterfaces, que
+    es de v1.0. Ningún parser veía una interfaz completa."""
+    card = cli.get("/.well-known/agent-card.json").json()
+
+    assert card["protocolVersion"] == "1.0"
+    iface = card["supportedInterfaces"][0]
+    assert set(iface) >= {"url", "protocolBinding", "protocolVersion"}
+    # El protocolVersion de la interfaz es la versión de A2A, no la fecha del
+    # spec de Open Responses.
+    assert iface["protocolVersion"] == "1.0"
+    assert iface["url"] == card["url"], "la interfaz preferida y url deben coincidir"
+
+
+def test_agent_card_usa_una_uri_como_binding_propio(cli):
+    """A2A registra JSONRPC, GRPC y HTTP+JSON. Un binding propio va como URI,
+    para no chocar con valores futuros del núcleo."""
+    card = cli.get("/.well-known/agent-card.json").json()
+
+    binding = card["supportedInterfaces"][0]["protocolBinding"]
+    assert binding.startswith("https://"), f"binding no es URI: {binding!r}"
+    assert card["preferredTransport"] == binding, "v0.3 y v1.0 deben coincidir"
+    assert card["additionalInterfaces"][0]["transport"] == binding
+
+
 # --- herramientas internas -------------------------------------------------
 def test_herramientas_internas_no_alucinan():
     """Kubernetes ya NO sirve como ejemplo de hueco: el perfil lo cubre.
@@ -875,3 +900,94 @@ def test_el_resumen_desglosa_los_tres_estados():
     assert (r["directos"], r["adyacentes"], r["sin_evidencia"]) == (1, 1, 1)
     assert r["total"] == 3
     assert "cubiertos" not in r, "el conteo único escondía justo la distinción"
+
+
+# --- guardarraíles de cierre de respuesta ----------------------------------
+# Dos comportamientos observados en producción: el agente delegaba en el
+# usuario el criterio de su propia respuesta, y ofrecía entregables que no
+# puede construir desde el perfil.
+def test_system_prompt_prohibe_delegar_el_criterio():
+    from app.agent_brain import construir_system_prompt
+
+    sp = construir_system_prompt().lower()
+    assert "nunca preguntes qué respuesta se espera" in sp
+    assert "complacencia" in sp
+
+
+def test_system_prompt_prohibe_ofrecer_artefactos_inventados():
+    from app.agent_brain import construir_system_prompt
+
+    sp = construir_system_prompt().lower()
+    assert "no ofrezcas diagramas" in sp
+    assert "sólo ofrece profundizar en algo que ya exista en el perfil" in sp
+
+
+def _caso_golden(cid: str) -> dict:
+    import yaml
+
+    from app.core import ROOT
+
+    suite = yaml.safe_load((ROOT / "evals" / "golden.yaml").read_text(encoding="utf-8"))
+    return next(c for c in suite["casos"] if c["id"] == cid)
+
+
+def _asserts_de_evals():
+    """Importa el motor de asserts de la batería sin correrla."""
+    import sys
+
+    from app.core import ROOT
+
+    sys.path.insert(0, str(ROOT / "evals"))
+    from run_evals import asserts
+
+    return asserts
+
+
+# Las respuestas REALES que motivaron las reglas. Si un assert deja de
+# atraparlas, el caso de la batería quedó decorativo.
+_RESPUESTA_QUE_DELEGA = (
+    "Eso no está en mi perfil como un conteo de años. Trabajo con Kubernetes "
+    "autohospedando n8n y con Google Cloud. Si me dices qué rango de años "
+    "aceptan, puedo indicar si mi experiencia está presente."
+)
+_RESPUESTA_QUE_OFRECE_DIAGRAMA = (
+    "El bot corre sobre n8n con tool calling contra los sistemas del negocio. "
+    "Si quieres te doy un diagrama de alto nivel de la arquitectura."
+)
+_RESPUESTA_BUENA_ANIOS = (
+    "Kubernetes y Google Cloud sí están en mi perfil: autohospedo n8n en "
+    "Kubernetes y desplegué un servidor MCP en Cloud Run. Lo que no está es un "
+    "conteo de años para esa combinación; el perfil da fechas por puesto, no "
+    "antigüedad por tecnología."
+)
+_RESPUESTA_BUENA_ARQUITECTURA = (
+    "El bot corre sobre n8n autohospedado en Kubernetes, con Claude vía API "
+    "sobre Azure AI Foundry y tool calling contra SQL Server y el CRM. Puedo "
+    "profundizar en el subagente de inventario si te interesa."
+)
+
+
+def test_el_caso_de_delegacion_atrapa_la_respuesta_real():
+    asserts = _asserts_de_evals()
+    caso = _caso_golden("no-delega-el-criterio")
+
+    fallos = asserts(caso, _RESPUESTA_QUE_DELEGA)
+    assert fallos, "el caso no atrapa la respuesta que motivó la regla"
+    assert not asserts(caso, _RESPUESTA_BUENA_ANIOS), "falso positivo con la respuesta correcta"
+
+
+def test_el_caso_de_artefactos_atrapa_la_respuesta_real():
+    asserts = _asserts_de_evals()
+    caso = _caso_golden("no-ofrece-artefactos-que-no-puede-hacer")
+
+    fallos = asserts(caso, _RESPUESTA_QUE_OFRECE_DIAGRAMA)
+    assert fallos, "el caso no atrapa la oferta de diagrama"
+    assert not asserts(caso, _RESPUESTA_BUENA_ARQUITECTURA), "ofrecer profundizar en el perfil es válido"
+
+
+def test_los_casos_nuevos_tienen_juez():
+    """El assert determinista atrapa la frase literal; el juez, la intención."""
+    for cid in ("no-delega-el-criterio", "no-ofrece-artefactos-que-no-puede-hacer"):
+        caso = _caso_golden(cid)
+        assert caso.get("juez"), f"{cid} necesita juez: la paráfrasis se le escapa al assert"
+        assert caso.get("no_debe_contener"), f"{cid} necesita asserts deterministas"
