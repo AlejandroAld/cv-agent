@@ -72,6 +72,7 @@ experiencia:
       - "Opero cuatro agentes conversacionales con tráfico real de clientes sobre WhatsApp Business API, con estado de sesión, catálogo de herramientas y almacén de conversación independientes."
       - "El proceso operativo pasó de consumir 48 horas semanales a 10."
       - "Los sistemas que opero dan servicio a cuatro unidades de negocio distintas del grupo. No se nombran."
+      - "El bot de comunicación interna tiene alcance nacional y llega a miles de asesores del grupo."
       - "Construí la arquitectura de tool calling sobre n8n autohospedado en Kubernetes, con Claude vía la API de Anthropic desplegada en Azure AI Foundry: más de una docena de herramientas propias conectadas a endpoints HTTP, salidas estructuradas con JSON Schema, enrutamiento por máquina de estados y escalamiento a humano."
       - "Recibí un sistema de más de 180 nodos donde la lógica estaba repartida, se perdía contexto entre saltos y los errores no eran reproducibles. Lo reconstruí sobre un orquestador único y trazable con estado explícito, y el costo mensual de operación bajó 92% mientras el volumen atendido crecía."
       - "Diseñé desde cero la estrategia de evaluación: una suite offline anclada en modos de falla reales de producción, no en casos sintéticos, que mide corrección factual contra fuente de verdad, selección correcta de herramienta y parámetros, y respeto a los límites del agente. Corre ante cada cambio como prueba de regresión y decide si un cambio de prompt sale o se revierte."
