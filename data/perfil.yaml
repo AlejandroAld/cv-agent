@@ -35,6 +35,7 @@ persona:
     - "expectativa salarial"
     - "sueldo actual o anterior, exacto o aproximado"
     - "nombres de clientes del grupo, marcas socias y sistemas propietarios"
+    - "nombres de las unidades de negocio del grupo"
     - "métricas de negocio: ventas, ingresos, márgenes, costos operativos en cifras absolutas"
     - "tamaño de equipos, plantillas y cambios de plantilla"
     - "estructura organizacional interna del empleador"
@@ -69,6 +70,8 @@ experiencia:
       despliegue, seguridad, evaluación y monitoreo.
     logros:
       - "Opero cuatro agentes conversacionales con tráfico real de clientes sobre WhatsApp Business API, con estado de sesión, catálogo de herramientas y almacén de conversación independientes."
+      - "El proceso operativo pasó de consumir 48 horas semanales a 10."
+      - "Los sistemas que opero dan servicio a cuatro unidades de negocio distintas del grupo. No se nombran."
       - "Construí la arquitectura de tool calling sobre n8n autohospedado en Kubernetes, con Claude vía la API de Anthropic desplegada en Azure AI Foundry: más de una docena de herramientas propias conectadas a endpoints HTTP, salidas estructuradas con JSON Schema, enrutamiento por máquina de estados y escalamiento a humano."
       - "Recibí un sistema de más de 180 nodos donde la lógica estaba repartida, se perdía contexto entre saltos y los errores no eran reproducibles. Lo reconstruí sobre un orquestador único y trazable con estado explícito, y el costo mensual de operación bajó 92% mientras el volumen atendido crecía."
       - "Diseñé desde cero la estrategia de evaluación: una suite offline anclada en modos de falla reales de producción, no en casos sintéticos, que mide corrección factual contra fuente de verdad, selección correcta de herramienta y parámetros, y respeto a los límites del agente. Corre ante cada cambio como prueba de regresión y decide si un cambio de prompt sale o se revierte."
@@ -80,6 +83,7 @@ experiencia:
       - "Construí todas las plataformas web que hacen auditable la operación de agentes: mini CRMs por línea de negocio donde una persona revisa, valida, aprueba y corrige lo que el agente produce antes de que tenga efecto. Es la capa de human-in-the-loop del sistema, no un tablero de reportes: sin ella los agentes no serían operables ni auditables por el negocio."
       - "Definí el control de acceso de toda la arquitectura: RBAC granular, permisos mínimos por herramienta, aislamiento por tenant y OAuth 2.0 / JWT en cada integración que toca datos de clientes."
       - "Construí un motor determinista de máquina de estados sobre Cloud Functions para los procesos contables que exigen reproducibilidad y auditoría, deliberadamente sin modelo de por medio: cálculo periódico con historial auditable, sincronización con ERP y generación de documentos firmados digitalmente."
+      - "Antes del sistema, el cálculo de márgenes no tenía trazabilidad: no se podía reconstruir cómo se había llegado a una cifra, así que la tasa de error era inmedible. El motor lo dejó con historial auditable, que es la condición para siquiera poder medirla."
       - "Integré MS Dynamics 365 con Dataverse, ERP y un CRM construido de cero incluido el modelo de datos, sobre PostgreSQL, SQL Server y Azure Cosmos DB, con cortes sin downtime mediante espejo por etapas y blue/green view swap."
       - "Levanto requerimientos directamente con direcciones de negocio, traduzco la necesidad a arquitectura de solución, y documento y capacito a los equipos que operan los sistemas."
     stack: ["Claude vía API de Anthropic sobre Microsoft Azure AI Foundry", "n8n autohospedado en Kubernetes", "MCP (Model Context Protocol)", "LangGraph", "LangChain", "LangSmith", "WhatsApp Business API", "Python", "TypeScript", "Next.js", "PostgreSQL", "SQL Server", "Azure Cosmos DB", "Firestore", "Redis", "Microsoft Dynamics 365 y Dataverse", "GCP (Cloud Run, Cloud Functions, Cloud Storage, BigQuery)", "Docker", "Kubernetes", "CI/CD", "Git"]
