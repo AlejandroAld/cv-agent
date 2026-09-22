@@ -280,6 +280,10 @@ habilidades:
 
 educacion:
   - titulo: "Ingeniería en Inteligencia Artificial"
+    # Nivel del grado por idioma: el sitio lo antepone al título traducido.
+    nivel:
+      es: "Ingeniería"
+      en: "B.S."
     institucion: "Instituto Politécnico Nacional (IPN)"
     periodo: "2021-02 a 2025-01. Promedio 9.31 / 10.0"
 
