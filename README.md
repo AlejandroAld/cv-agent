@@ -317,6 +317,25 @@ python evals/run_evals.py --base-url http://localhost:8080/v1
 Con Dev Containers no hace falta nada de lo anterior: `.devcontainer/` levanta
 Python 3.12 con las dependencias, `az` y el proveedor mock ya configurado.
 
+### Grabar una corrida para el sitio
+
+El portafolio cuenta su página como una ejecución de este agente, y sólo
+reproduce corridas grabadas: nada corre en vivo. `scripts/grabar_corrida.py`
+graba una contra el agente desplegado —eventos SSE con marca de tiempo, id,
+usage, herramientas internas (que el servidor reporta en `metadata.agent_*`) y
+el contexto bloque por bloque contado con `o200k_base`— y la deja como JSON en
+el repo del sitio:
+
+```bash
+pip install tiktoken
+AGENT_API_KEY=... python scripts/grabar_corrida.py --lang es --out ../personal-portfolio/src/content/runs/es.json
+AGENT_API_KEY=... python scripts/grabar_corrida.py --lang en --out ../personal-portfolio/src/content/runs/en.json
+```
+
+Se corre desde el commit desplegado: el SHA que graba es HEAD y el sitio lo
+cita. La respuesta grabada se imprime al final para aprobarla antes de
+publicarla.
+
 ## Desplegar
 
 La imagen se compila y publica sola: cada push a `main` dispara

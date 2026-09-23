@@ -209,7 +209,8 @@ def test_eco_de_parametros(cli):
     assert d["instructions"] == "Sé breve"
     assert d["temperature"] == 0.7
     assert d["reasoning"]["effort"] == "medium"
-    assert d["metadata"] == {"origen": "prueba"}
+    # La metadata del cliente se conserva; el servidor añade sus claves agent_*.
+    assert d["metadata"]["origen"] == "prueba"
     assert d["truncation"] == "auto"
 
 
@@ -991,3 +992,30 @@ def test_los_casos_nuevos_tienen_juez():
         caso = _caso_golden(cid)
         assert caso.get("juez"), f"{cid} necesita juez: la paráfrasis se le escapa al assert"
         assert caso.get("no_debe_contener"), f"{cid} necesita asserts deterministas"
+
+
+# --- metadata del agente: herramientas internas visibles desde fuera --------
+def test_metadata_reporta_las_herramientas_internas(cli):
+    """El cliente nunca ve ejecutarse una herramienta interna; la metadata sí lo dice.
+
+    Con el mock, una pregunta por un proyecto dispara `buscar_en_perfil` una
+    vez; un saludo no dispara ninguna. La metadata del cliente se conserva.
+    """
+    con = cli.post("/v1/responses", headers=H, json={"input": "cuéntame del proyecto de WhatsApp", "metadata": {"k": "v"}}).json()
+    assert con["metadata"]["k"] == "v"
+    assert con["metadata"]["agent_tool_calls"] == "1"
+    assert con["metadata"]["agent_tools"] == "buscar_en_perfil"
+    assert float(con["metadata"]["agent_tool_ms"]) >= 0
+
+    sin = cli.post("/v1/responses", headers=H, json={"input": "hola"}).json()
+    assert sin["metadata"]["agent_tool_calls"] == "0"
+    assert sin["metadata"]["agent_tools"] == ""
+
+
+def test_el_contexto_del_ingreso_viaja_con_sus_fuentes():
+    from app.agent_brain import construir_system_prompt
+
+    p = construir_system_prompt()
+    assert "primeras generaciones" in p
+    assert "https://www.escom.ipn.mx/htmls/oferta/iia2020.php" in p
+    assert "https://openai.com/index/chatgpt/" in p

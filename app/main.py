@@ -223,6 +223,7 @@ async def _ejecutar(
     usage_total: dict[str, Any] = {}
     indice_salida = 0
     llamadas_herramienta = 0
+    herramientas_usadas: list[tuple[str, float]] = []
 
     for _ in range(s.max_tool_iterations):
         texto = ""
@@ -352,13 +353,10 @@ async def _ejecutar(
                 args = {}
             t0 = time.perf_counter()
             resultado = ejecutar_herramienta(p["name"], args)
+            ms = round((time.perf_counter() - t0) * 1000, 1)
             llamadas_herramienta += 1
-            log_event(
-                "tool_call",
-                tool=p["name"],
-                ms=round((time.perf_counter() - t0) * 1000, 1),
-                ok="error" not in resultado,
-            )
+            herramientas_usadas.append((p["name"], ms))
+            log_event("tool_call", tool=p["name"], ms=ms, ok="error" not in resultado)
             entrada.append(
                 {
                     "type": "function_call_output",
@@ -393,8 +391,25 @@ async def _ejecutar(
             "status": "completed",
             "items": items_finales,
             "tool_calls": llamadas_herramienta,
+            "tool_names": [n for n, _ in herramientas_usadas],
+            "tool_ms": [m for _, m in herramientas_usadas],
         },
     )
+
+
+def _metadata_agente(final: dict[str, Any]) -> dict[str, str]:
+    """Lo que el bucle hizo con herramientas internas, como metadata del Response.
+
+    El cliente nunca ve ejecutarse una herramienta interna: sin esto, una
+    grabación de la corrida no puede saber si hubo llamadas ni cuánto tardaron.
+    Van como cadenas, que es lo que el spec admite en metadata, y la metadata
+    del cliente se conserva entera.
+    """
+    return {
+        "agent_tool_calls": str(final.get("tool_calls", 0)),
+        "agent_tools": ",".join(final.get("tool_names") or []),
+        "agent_tool_ms": ",".join(str(m) for m in final.get("tool_ms") or []),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -459,6 +474,7 @@ async def crear_respuesta(request: Request, authorization: str | None = Header(d
             peticion=peticion,
             usage=final["usage"],
             creado=creado,
+            extra_metadata=_metadata_agente(final),
         )
         if _quiere_guardar(peticion):
             _guardar_estado(response_id, final["items"], respuesta)
@@ -487,6 +503,7 @@ async def crear_respuesta(request: Request, authorization: str | None = Header(d
                 peticion=peticion,
                 usage=final["usage"],
                 creado=creado,
+                extra_metadata=_metadata_agente(final),
             )
             if _quiere_guardar(peticion):
                 _guardar_estado(response_id, final["items"], respuesta)
@@ -664,6 +681,7 @@ async def chat_demo(request: Request):
                 response=orx.construir_response(
                     response_id=response_id, modelo=get_settings().model,
                     salida=final["salida"], peticion=peticion, usage=final["usage"], creado=creado,
+                    extra_metadata=_metadata_agente(final),
                 ),
             )
         except Exception as exc:

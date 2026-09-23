@@ -286,6 +286,18 @@ educacion:
       en: "B.S."
     institucion: "Instituto Politécnico Nacional (IPN)"
     periodo: "2021-02 a 2025-01. Promedio 9.31 / 10.0"
+    # Contexto del ingreso, con sus fuentes: la fecha está en `periodo`, y las
+    # dos referencias son verificables. Es un dato del perfil, no un adorno.
+    contexto: >-
+      Entré a Ingeniería en Inteligencia Artificial en 2021, en una de las
+      primeras generaciones del programa del IPN: ESCOM lo creó con el plan de
+      estudios 2020, y ChatGPT salió el 30 de noviembre de 2022, casi dos años
+      después de mi ingreso.
+    fuentes:
+      - descripcion: "ESCOM (IPN), Ingeniería en Inteligencia Artificial, plan de estudios 2020"
+        url: "https://www.escom.ipn.mx/htmls/oferta/iia2020.php"
+      - descripcion: "OpenAI, Introducing ChatGPT, 30 de noviembre de 2022"
+        url: "https://openai.com/index/chatgpt/"
 
 publicaciones:
   - titulo: "Detection of Tendency to Depression through Text Analysis"

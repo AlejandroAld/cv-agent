@@ -239,8 +239,14 @@ def construir_response(
     usage: dict[str, Any] | None = None,
     error: dict[str, Any] | None = None,
     creado: int | None = None,
+    extra_metadata: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Objeto Response con todos los campos que el spec marca como required."""
+    """Objeto Response con todos los campos que el spec marca como required.
+
+    `extra_metadata` son pares que el servidor añade a la `metadata` del
+    cliente (que se conserva entera): lo que el bucle hizo con herramientas
+    internas, para que una corrida grabada desde fuera pueda saberlo.
+    """
     ahora = int(time.time())
     u = usage or {}
     entrada_tok = int(u.get("prompt_tokens") or u.get("input_tokens") or 0)
@@ -283,7 +289,7 @@ def construir_response(
         "store": bool(peticion.get("store", True)),
         "background": bool(peticion.get("background", False)),
         "service_tier": peticion.get("service_tier") or "default",
-        "metadata": peticion.get("metadata") or {},
+        "metadata": {**(peticion.get("metadata") or {}), **(extra_metadata or {})},
         "safety_identifier": peticion.get("safety_identifier"),
         "prompt_cache_key": peticion.get("prompt_cache_key"),
         "usage": {

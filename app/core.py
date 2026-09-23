@@ -242,13 +242,17 @@ class Profile:
 
         edu = [e for e in (self.raw.get("educacion") or []) if e.get("titulo")]
         if edu:
-            partes.append(
-                "# Educación\n"
-                + "\n".join(
-                    f"{e.get('titulo')} — {e.get('institucion','')} ({e.get('periodo','')})"
-                    for e in edu
-                )
-            )
+            lineas_edu = []
+            for e in edu:
+                lineas_edu.append(f"{e.get('titulo')} — {e.get('institucion','')} ({e.get('periodo','')})")
+                # El contexto del ingreso viaja con sus fuentes: es un dato que
+                # el agente puede afirmar, y la URL es lo que lo hace verificable.
+                if e.get("contexto"):
+                    lineas_edu.append("  " + str(e["contexto"]).strip())
+                for f in e.get("fuentes") or []:
+                    if isinstance(f, dict) and f.get("url"):
+                        lineas_edu.append(f"  Fuente: {f.get('descripcion', '')} — {f['url']}")
+            partes.append("# Educación\n" + "\n".join(lineas_edu))
 
         if self.publicaciones:
             bloques = []
