@@ -15,7 +15,7 @@
 persona:
   nombre: "José Alejandro Aldama Ramos"
   alias: "Alex"
-  titular: "Ingeniero en Inteligencia Artificial — agentes en producción, evaluación e integración con sistemas de negocio"
+  titular: "Ingeniero en Inteligencia Artificial: agentes en producción, evaluación e integración con sistemas de negocio"
   # Presentación corta para el sitio público. `resumen`, más abajo, es la versión
   # completa que usa el agente; esta es la que cabe en un héroe.
   presentacion: >-
@@ -131,7 +131,7 @@ experiencia:
     stack: ["Power Automate", "Power Apps", "Microsoft Entra ID", "Microsoft 365", "ETL"]
 
   - id: "exp-ipn"
-    puesto: "Investigador en IA Aplicada — NLP y Deep Learning"
+    puesto: "Investigador en IA Aplicada: NLP y Deep Learning"
     empresa: "Instituto Politécnico Nacional"
     cliente: "Investigación académica"
     inicio: "2024-01"
@@ -366,3 +366,23 @@ faq:
       problemas, pero no de clientes, marcas socias, cifras de negocio ni nombres
       de sistemas internos. Eso es información de mi empleador. Con gusto entro en
       el detalle técnico que necesites.
+
+# Cómo trabajo: cuatro principios, cada uno con su prueba. El sitio los muestra
+# en "Quién soy" tal cual; el texto es literal y está aprobado.
+principios:
+  - frase: "Un agente se prueba con tráfico real, no en el demo."
+    prueba: >-
+      Hoy tengo cuatro en producción con clientes reales, medidos en calidad,
+      costo y latencia por interacción.
+  - frase: "El modelo propone; la persona decide."
+    prueba: >-
+      Por eso construí las plataformas donde alguien revisa, aprueba y corrige
+      lo que produce el agente antes de que tenga efecto.
+  - frase: "Lo simple escala mejor que lo impresionante."
+    prueba: >-
+      Reemplacé un sistema de más de 180 nodos por un solo orquestador
+      trazable, y el volumen atendido creció.
+  - frase: "Lo construyo con quien lo va a operar."
+    prueba: >-
+      Trabajo directo con las direcciones de negocio y capacito a los equipos
+      que usan lo que construyo.
