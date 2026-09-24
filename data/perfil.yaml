@@ -33,7 +33,7 @@ persona:
     - idioma: "Español"
       nivel: "Nativo"
     - idioma: "Inglés"
-      nivel: "B2, competencia profesional de trabajo. Lectura y escritura técnica fluidas, con una publicación arbitrada escrita en inglés. Conversacional en nivel intermedio alto, en mejora activa."
+      nivel: "B2, competencia profesional de trabajo. Lectura y escritura técnica a diario, con una publicación arbitrada escrita en inglés. Conversacional en nivel intermedio alto, en mejora activa."
   contacto:
     email: "josealejandroaldamaramos@gmail.com"
     linkedin: "https://www.linkedin.com/in/jose-alejandro-aldama-ramos/"
@@ -80,7 +80,6 @@ experiencia:
       despliegue, seguridad, evaluación y monitoreo.
     logros:
       - "Opero cuatro agentes conversacionales con tráfico real de clientes sobre WhatsApp Business API, con estado de sesión, catálogo de herramientas y almacén de conversación independientes."
-      - "Bajé un proceso de cálculo de 48 a 10 horas semanales de trabajo manual y lo hice trazable. Antes del sistema el cálculo no dejaba rastro y su tasa de error era inmedible."
       - "Los sistemas que opero dan servicio a cuatro unidades de negocio distintas del grupo. No se nombran."
       - "El bot de comunicación interna tiene alcance nacional y llega a miles de asesores del grupo."
       - "Construí la arquitectura de tool calling sobre n8n autohospedado en Kubernetes, con Claude vía la API de Anthropic desplegada en Azure AI Foundry: más de una docena de herramientas propias conectadas a endpoints HTTP, salidas estructuradas con JSON Schema, enrutamiento por máquina de estados y escalamiento a humano."
@@ -386,3 +385,21 @@ principios:
     prueba: >-
       Trabajo directo con las direcciones de negocio y capacito a los equipos
       que usan lo que construyo.
+
+# El umbral del sitio: la definición en grande, antes de las dos opciones.
+# Texto literal y aprobado, en los dos idiomas; la página lo rinde de aquí.
+umbral:
+  es:
+    saludo: "Puedes decirme Alex."
+    definicion: "Antes que nada, soy hermano e hijo mayor."
+    presentacion: >-
+      Y en lo profesional, permíteme presentarme. Si tienes prisa, lee mi CV.
+      Si tienes unos minutos, explora mi perfil como un agente: cada nodo es
+      una parte de mi trayectoria.
+  en:
+    saludo: "You can call me Alex."
+    definicion: "First and foremost, I'm a brother and the eldest son."
+    presentacion: >-
+      Professionally, let me introduce myself. If you're in a hurry, read my
+      CV. If you have a few minutes, explore my profile as an agent: every
+      node is a part of my path.
